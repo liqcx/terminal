@@ -861,7 +861,7 @@ Expected: пуш подтверждён — `origin/feat-cld/bracket-price-check
 
 ## Notes for next phase
 
-**Закрыто 2026-09-23.** Ветка `feat-cld/bracket-price-check`, коммиты `9ce9c40` (T1), `73ce4d6` + `600102c` (T2, раунд исправлений 1), `a5ebc04` (T3); draft-PR в `main` — см. ниже.
+**Закрыто 2026-09-23.** Ветка `feat-cld/bracket-price-check`, коммиты `9ce9c40` (T1), `73ce4d6` + `600102c` (T2, раунд исправлений 1), `a5ebc04` (T3); draft-PR в `main` — liqu-fi/terminal#66.
 
 - **Отступления от текста плана.** `resultingPosition` зовёт `toSignedSize(Qty(open.size), …)` — `open.size` там `bigint`, без обёртки TS2345. В репозитории нет prettier (ни конфига, ни зависимости) — шаги `prettier --write` пропущены, гейт форматирования — lint. JSX-фрагменты плана с `;` внутри `{…}` — артефакт markdown, в коде без него. Трейлер коммитов — `Claude Opus 5.5 (1M context)`.
 - **Добавлено ревью:** e2e «switching TP/SL off drops the verdict…» — правило «тумблер погашен — вердикта нет» до него ничем не ловилось (tp/sl живут в стейте при скрытых полях).
