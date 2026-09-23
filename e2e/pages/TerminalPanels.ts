@@ -335,6 +335,12 @@ export class UserInfoPanel {
   get tpslError(): Locator {
     return this.page.getByTestId("tpsl-error");
   }
+  get tpslValidation(): Locator {
+    return this.page.getByTestId("tpsl-validation");
+  }
+  get tpslWarning(): Locator {
+    return this.page.getByTestId("tpsl-warning");
+  }
 
   get ordersTable(): Locator {
     return this.page.getByTestId("orders-table");
