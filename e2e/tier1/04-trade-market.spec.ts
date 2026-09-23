@@ -280,6 +280,26 @@ test.describe("market orders", () => {
     await expect(trade.entryTpslValidation).toHaveText("TP/SL fit a short only");
   });
 
+  test("switching TP/SL off drops the verdict, even with a bad price still in the fields", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    // Тот же отказный тейк, что и выше: Buy гаснет, пока тумблер включён.
+    await trade.entryTpInput.fill("60000");
+    await expect(trade.submitBuy).toBeDisabled();
+
+    // Тумблер гасит поля, а не чистит их — `tp` остаётся «60000» в состоянии.
+    // Скобки при этом ставить не собираются, и вердикта для кнопки быть не
+    // должно: связывать отказ с полем, которого на экране больше нет, нечем
+    // объяснить.
+    await trade.tpslToggle.click();
+    await expect(trade.submitBuy).toBeEnabled();
+  });
+
   test("brackets that fit neither side block both buttons and name both reasons", async ({
     page,
     world,
