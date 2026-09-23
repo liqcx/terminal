@@ -262,4 +262,87 @@ test.describe("market orders", () => {
     await expect.poll(() => world.submittedOrders.length).toBe(3);
     await expect(trade.tradeError).toBeHidden();
   });
+
+  test("a take-profit on the wrong side of mark blocks that side only", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    // Марк фикстуры — 70 000. Тейк ниже него у длинной сработал бы на первом
+    // тике и закрыл бы её по рынку; короткой такой тейк годится.
+    await trade.entryTpInput.fill("60000");
+
+    await expect(trade.submitBuy).toBeDisabled();
+    await expect(trade.submitSell).toBeEnabled();
+    await expect(trade.entryTpslValidation).toHaveText("TP/SL fit a short only");
+  });
+
+  test("brackets that fit neither side block both buttons and name both reasons", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    // Тейк и стоп на одном уровне ниже марка: длинной не годится тейк,
+    // короткой — стоп. Подавать такое нечем, и кнопка об этом говорит.
+    await trade.entryTpInput.fill("60000");
+    await trade.entrySlInput.fill("60000");
+
+    await expect(trade.submitBuy).toBeDisabled();
+    await expect(trade.submitSell).toBeDisabled();
+    await expect(trade.entryTpslValidation).toContainText(
+      "Long — Take profit: must be above mark",
+    );
+    await expect(trade.entryTpslValidation).toContainText(
+      "Short — Stop loss: must be above mark",
+    );
+    expect(world.submittedOrders).toHaveLength(0);
+  });
+
+  test("a limit entry judges brackets against the entry price too", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.selectTab("limit");
+    await trade.setLimitPrice("65000");
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    // Ниже марка (70 000), но выше лимита (65 000): цена дойдёт до стопа
+    // раньше, чем до входа, — он сгорит до позиции и снимет тейк по связке.
+    await trade.entrySlInput.fill("67000");
+
+    await expect(trade.submitBuy).toBeDisabled();
+    await expect(trade.entryTpslValidation).toContainText(
+      "must be below entry price",
+    );
+  });
+
+  test("an open position drops the entry-price reference", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      return w;
+    });
+
+    await trade.selectTab("limit");
+    await trade.setLimitPrice("65000");
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    // Тот же стоп, что запрещён выше: у живой длинной позиции он законен —
+    // скобки принадлежат ей, а не ещё не сработавшему лимиту.
+    await trade.entrySlInput.fill("67000");
+
+    await expect(trade.submitBuy).toBeEnabled();
+    await expect(trade.entryTpslValidation).toBeHidden();
+  });
 });

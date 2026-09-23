@@ -9,22 +9,26 @@ import { Button } from "@/components/ui/button";
  * отказа на самой кнопке. Причина живёт строкой ниже, кнопка при отказе просто
  * неактивна — иначе одно и то же место экрана было бы то призывом к действию,
  * то объяснением, почему действие невозможно.
+ *
+ * Гасятся кнопки порознь: скобки входа годятся одной стороне и запрещены
+ * другой (тейк ниже цены нормален короткой позиции и закрыл бы длинную сразу),
+ * и общий флаг отнял бы у пользователя законную сторону.
  */
 export function SubmitButtons({
   onSubmit,
-  disabled,
-  pending,
+  buyDisabled,
+  sellDisabled,
 }: {
   onSubmit: (side: Side) => void;
-  disabled: boolean;
-  pending: boolean;
+  buyDisabled: boolean;
+  sellDisabled: boolean;
 }) {
   return (
     <div className="flex gap-2">
       <Button
         variant="long"
         className="flex-1"
-        disabled={disabled || pending}
+        disabled={buyDisabled}
         onClick={() => onSubmit(Side.BUY)}
         data-testid="submit-buy-button"
       >
@@ -33,7 +37,7 @@ export function SubmitButtons({
       <Button
         variant="short"
         className="flex-1"
-        disabled={disabled || pending}
+        disabled={sellDisabled}
         onClick={() => onSubmit(Side.SELL)}
         data-testid="submit-sell-button"
       >

@@ -96,6 +96,7 @@ export class TradePanel {
   readonly tpslToggle: Locator;
   readonly entryTpInput: Locator;
   readonly entrySlInput: Locator;
+  readonly entryTpslValidation: Locator;
 
   constructor(private readonly page: Page) {
     this.root = page.getByTestId("trade-form");
@@ -125,6 +126,7 @@ export class TradePanel {
     this.tpslToggle = page.getByTestId("tpsl-toggle");
     this.entryTpInput = page.getByTestId("entry-tp-input");
     this.entrySlInput = page.getByTestId("entry-sl-input");
+    this.entryTpslValidation = page.getByTestId("entry-tpsl-validation");
   }
 
   tab(tab: TradeTab): Locator {
@@ -186,8 +188,10 @@ export class TradePanel {
   /**
    * Кнопка подачи выбранной стороны.
    *
-   * @remarks Гейт у обеих один — `disabled` считается формой, а не стороной, —
-   * поэтому проверки доступности хватает на одной, и по умолчанию это покупка.
+   * @remarks Гейт скобок входа — свой на сторону (годные обеим кнопкам скобки
+   * гасят обе одинаково, у остальных сценариев набора TP/SL не участвует),
+   * поэтому проверки доступности форм-гейта по-прежнему хватает на одной, и по
+   * умолчанию это покупка.
    */
   submitButtonFor(side: "buy" | "sell" = "buy"): Locator {
     return side === "buy" ? this.submitBuy : this.submitSell;
