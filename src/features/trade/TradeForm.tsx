@@ -1,6 +1,7 @@
 import {
   acceptablePrice,
-  type BracketsVerdict,
+  type BracketsPlan,
+  bracketsPlanFor,
   Bps,
   describeBracketRejection,
   describeRejection,
@@ -9,7 +10,6 @@ import {
   Price,
   Qty,
   Side,
-  validateBrackets,
 } from "@liq/sdk";
 import {
   useAccountId,
@@ -172,9 +172,9 @@ export function TradeForm() {
    * Судит экран, а не только действие SDK: скобки входа подаются после того,
    * как шлюз принял вход, и отказ там оставил бы позицию без стопа.
    */
-  function verdictFor(side: Side): BracketsVerdict | null {
+  function verdictFor(side: Side): BracketsPlan | null {
     if (!bracketsOn || marketId === undefined) return null;
-    return validateBrackets({
+    return bracketsPlanFor({
       position: resultingPosition(
         marketId,
         openPosition,
@@ -192,15 +192,13 @@ export function TradeForm() {
 
   const longVerdict = verdictFor(Side.BUY);
   const shortVerdict = verdictFor(Side.SELL);
-  const longOk = longVerdict?.ok !== false;
-  const shortOk = shortVerdict?.ok !== false;
+  const longOk = longVerdict === null || longVerdict.rejected.length === 0;
+  const shortOk = shortVerdict === null || shortVerdict.rejected.length === 0;
 
   /** Отказы одной стороны одной строкой; пусто — сторона годна или судить нечем. */
-  function legsOf(label: string, verdict: BracketsVerdict | null): string {
-    const legs = [
-      describeBracketRejection(verdict?.takeProfit ?? null),
-      describeBracketRejection(verdict?.stopLoss ?? null),
-    ]
+  function legsOf(label: string, verdict: BracketsPlan | null): string {
+    const legs = (verdict?.rejected ?? [])
+      .map(describeBracketRejection)
       .filter((t) => t !== undefined)
       .join(" · ");
     return legs === "" ? "" : `${label} — ${legs}`;

@@ -12,7 +12,7 @@ import { Qty, Side, toSignedSize } from "@liq/sdk";
  *
  * Знак приводит `toSignedSize`: часть источников несёт размер по модулю.
  * Нулевой размер (полное закрытие) — не особый случай: ног у такой позиции
- * нет, и `validateBrackets` отвечает пустым вердиктом.
+ * нет, и `bracketsPlanFor` ничего не отклоняет.
  */
 export function resultingPosition(
   marketId: bigint,

@@ -1,8 +1,8 @@
 import {
+  bracketsPlanFor,
   describeBracketRejection,
   describeBracketWarning,
   Price,
-  validateBrackets,
 } from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
 import { wadToFixed } from "@liq/core";
@@ -61,7 +61,7 @@ export function TpSlDialog({
   const slPrice = Price(parseOrZero(Price.parse, sl));
   // Марк строки живой: таблица обновляет его вместе с ценами, и вердикт
   // пересчитывается — скобка, законная минуту назад, гаснет вместе с ценой.
-  const verdict = validateBrackets({
+  const plan = bracketsPlanFor({
     position: row.position,
     brackets: row.brackets,
     takeProfit: tpPrice,
@@ -69,13 +69,11 @@ export function TpSlDialog({
     markPrice: Price(row.markPrice ?? 0n),
     liquidationPrice: row.position.liquidationPrice,
   });
-  const rejection = [
-    describeBracketRejection(verdict.takeProfit),
-    describeBracketRejection(verdict.stopLoss),
-  ]
+  const rejection = plan.rejected
+    .map(describeBracketRejection)
     .filter((t) => t !== undefined)
     .join(" · ");
-  const warning = describeBracketWarning(verdict.warn);
+  const warning = describeBracketWarning(plan.warn);
 
   // `mutate` (не `mutateAsync`): отказ показывается из `applyBrackets.error`
   // ниже, а диалог остаётся открытым — закрывать его поверх ошибки значило бы
@@ -175,7 +173,9 @@ export function TpSlDialog({
           <Button
             className="flex-1"
             disabled={
-              applyBrackets.isPending || accountId === undefined || !verdict.ok
+              applyBrackets.isPending ||
+              accountId === undefined ||
+              plan.rejected.length > 0
             }
             onClick={save}
             data-testid="tpsl-save"
