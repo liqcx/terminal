@@ -60,6 +60,8 @@ export function TpSlDialog({
         // `bigint`, а действие ждёт `Price`, поэтому бренд возвращается явно.
         takeProfit: Price(parseOrZero(Price.parse, tp)),
         stopLoss: Price(parseOrZero(Price.parse, sl)),
+        // Марк строки: по нему же судит гейт Save ниже.
+        markPrice: Price(row.markPrice ?? 0n),
       },
       { onSuccess: () => onClose() },
     );

@@ -7,7 +7,6 @@ import {
   Price,
   Qty,
   Side,
-  toSignedSize,
 } from "@liq/sdk";
 import {
   useAccountId,
@@ -33,6 +32,7 @@ import { ExecutionFlags } from "./ExecutionFlags";
 import { OrderPriceField } from "./OrderPriceField";
 import { OrderSummary } from "./OrderSummary";
 import { QuantityField } from "./QuantityField";
+import { resultingPosition } from "./resultingPosition";
 import { shouldAdoptLevel } from "./shouldAdoptLevel";
 import { SizeSlider } from "./SizeSlider";
 import { SubmitButtons } from "./SubmitButtons";
@@ -133,6 +133,20 @@ export function TradeForm() {
   }
   const tabPriceReady = parsedTabPrice() > 0n;
 
+  const openPosition = positions.find((p) => p.marketId === marketId);
+  /**
+   * Вторая опорная цена — только у лимитного входа без открытой позиции.
+   *
+   * @remarks Стоп между лимитной ценой и марком сгорел бы раньше, чем вход
+   * исполнится, и по связке снял бы тейк. Когда позиция уже открыта, скобки
+   * принадлежат ей, и опорная цена одна: стоп живой позиции законно стоит по
+   * эту сторону от ещё не сработавшего лимита.
+   */
+  const entryPrice =
+    tab === "Limit" && openPosition === undefined
+      ? Price(parsedTabPrice())
+      : undefined;
+
   const disabled =
     pending ||
     accountId === undefined ||
@@ -151,8 +165,8 @@ export function TradeForm() {
    * пользователь считал заменённой.
    *
    * Позиция здесь ещё дошлюзовая: вход принят, но не рассчитан, поэтому её
-   * размер складывается с размером входа вручную. Знак приводит
-   * `toSignedSize` — часть источников несёт размер по модулю.
+   * размер с размером входа складывает `resultingPosition` — там же знак
+   * приводит `toSignedSize`, часть источников несёт размер по модулю.
    *
    * Куда смотрит триггер, чем закрывается позиция и в какой связке стоят ноги,
    * решает действие SDK. Подаются они после того, как шлюз принял вход, то есть
@@ -160,17 +174,18 @@ export function TradeForm() {
    */
   function attachBrackets(entryDelta: Qty) {
     if (!tpslOn || accountId === undefined || marketId === undefined) return;
-    const open = positions.find((p) => p.marketId === marketId);
-    const size = Qty(
-      (open ? toSignedSize(open.size, open.side) : 0n) + entryDelta,
-    );
     // `mutate`, как и вход: отказ приходит в `applyBrackets.error` и печатается
     // строкой `trade-error`.
     applyBrackets.mutate({
-      position: { marketId, side: size < 0n ? Side.SELL : Side.BUY, size },
+      position: resultingPosition(marketId, openPosition, entryDelta),
       brackets: positionBrackets(marketId, conditional),
       takeProfit: Price(parseOrZero(Price.parse, tp)),
       stopLoss: Price(parseOrZero(Price.parse, sl)),
+      // Тот же марк, по которому судит гейт: к этому моменту цена могла уйти,
+      // и тогда действие отклонит ногу — законный отказ, он виден в
+      // `trade-error` с именем ноги.
+      markPrice: Price(markPrice),
+      entryPrice,
     });
   }
 
