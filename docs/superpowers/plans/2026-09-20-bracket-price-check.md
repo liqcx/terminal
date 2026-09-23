@@ -70,12 +70,12 @@ export function resultingPosition(
 ): { marketId: bigint; side: Side; size: Qty };
 ```
 
-- [ ] **Step 1: Проверить, что версия опубликована**
+- [x] **Step 1: Проверить, что версия опубликована**
 
 Run: `npm view @liqpro/liq-core version`
 Expected: `0.57.0`. Если `0.56.0` — остановиться и сказать владельцу: задача заблокирована публикацией.
 
-- [ ] **Step 2: Бамп**
+- [x] **Step 2: Бамп**
 
 ```bash
 # Якорь — `@^` и закрывающая кавычка: под него попадают только пять строк
@@ -89,12 +89,12 @@ Expected: пять строк с `^0.57.0` (`api-client`, `core`, `react`, `sdk`
 Run: `rtk proxy pnpm install`
 Expected: установка без ошибок; `pnpm-lock.yaml` изменён.
 
-- [ ] **Step 3: Убедиться, что типы красные**
+- [x] **Step 3: Убедиться, что типы красные**
 
 Run: `rtk proxy pnpm typecheck`
 Expected: FAIL — два места без `markPrice` в `ApplyBracketsInput` (`TradeForm.tsx`, `TpSlDialog.tsx`). Это и есть страховка SDK: забыть проверку нельзя.
 
-- [ ] **Step 4: Написать падающий тест `resultingPosition`**
+- [x] **Step 4: Написать падающий тест `resultingPosition`**
 
 Создать `src/features/trade/__tests__/resultingPosition.test.ts`:
 
@@ -161,12 +161,12 @@ describe("resultingPosition", () => {
 });
 ```
 
-- [ ] **Step 5: Убедиться, что тест падает**
+- [x] **Step 5: Убедиться, что тест падает**
 
 Run: `rtk proxy pnpm test -- resultingPosition`
 Expected: FAIL — `Failed to resolve import "../resultingPosition"`.
 
-- [ ] **Step 6: Написать `resultingPosition` и позвать её из обоих мест**
+- [x] **Step 6: Написать `resultingPosition` и позвать её из обоих мест**
 
 Создать `src/features/trade/resultingPosition.ts`:
 
@@ -247,7 +247,7 @@ const entryPrice =
         markPrice: Price(row.markPrice ?? 0n),
 ```
 
-- [ ] **Step 7: Убедиться, что тест и типы зелёные**
+- [x] **Step 7: Убедиться, что тест и типы зелёные**
 
 Run: `rtk proxy pnpm test -- resultingPosition`
 Expected: PASS, 6 тестов.
@@ -255,12 +255,12 @@ Expected: PASS, 6 тестов.
 Run: `rtk proxy pnpm typecheck && rtk proxy pnpm lint`
 Expected: обе команды — код 0.
 
-- [ ] **Step 8: Прогнать e2e, которые уже покрывают скобки**
+- [x] **Step 8: Прогнать e2e, которые уже покрывают скобки**
 
 Run: `rtk proxy pnpm test:e2e -- 04-trade-market 28-position-actions`
 Expected: PASS — поведение не менялось, менялся только вход действия. Существующие фикстуры годны по цене: марк 70 000, TP 80 000/90 000/95 000 выше, SL 60 000 ниже.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 rtk proxy pnpm exec prettier --write src/features/trade/resultingPosition.ts src/features/trade/__tests__/resultingPosition.test.ts src/features/trade/TradeForm.tsx src/features/positions/TpSlDialog.tsx
@@ -290,7 +290,7 @@ EOF
 - Consumes (задача 1): `resultingPosition(marketId, open, entryDelta)`; из `@liq/sdk` — `validateBrackets`, `describeBracketRejection`, тип `BracketsVerdict`.
 - Produces (нужно задаче 3): в page object панели тикета — `entryTpslValidation: Locator` (`entry-tpsl-validation`).
 
-- [ ] **Step 1: Написать падающие e2e**
+- [x] **Step 1: Написать падающие e2e**
 
 В `e2e/tier1/04-trade-market.spec.ts` в конец `test.describe("market orders", …)` добавить:
 
@@ -391,12 +391,12 @@ test("an open position drops the entry-price reference", async ({
 this.entryTpslValidation = page.getByTestId("entry-tpsl-validation");
 ```
 
-- [ ] **Step 2: Убедиться, что e2e падают**
+- [x] **Step 2: Убедиться, что e2e падают**
 
 Run: `rtk proxy pnpm test:e2e -- 04-trade-market`
 Expected: FAIL — четыре новых теста; кнопки активны, строки `entry-tpsl-validation` нет. Старые тесты спека зелёные.
 
-- [ ] **Step 3: Вердикт на сторону в тикете**
+- [x] **Step 3: Вердикт на сторону в тикете**
 
 В `src/features/trade/TradeForm.tsx` импорт из `@liq/sdk` дополнить:
 
@@ -533,7 +533,7 @@ const NO_BRACKETS = { takeProfit: null, stopLoss: null };
 />
 ```
 
-- [ ] **Step 4: Кнопки и строка**
+- [x] **Step 4: Кнопки и строка**
 
 В `src/features/trade/SubmitButtons.tsx` заменить пропсы и оба `disabled`:
 
@@ -599,17 +599,17 @@ export function EntryTpSlFields({
 }
 ```
 
-- [ ] **Step 5: Убедиться, что e2e проходят**
+- [x] **Step 5: Убедиться, что e2e проходят**
 
 Run: `rtk proxy pnpm test:e2e -- 04-trade-market`
 Expected: PASS — весь спек, включая четыре новых теста.
 
-- [ ] **Step 6: Гейты**
+- [x] **Step 6: Гейты**
 
 Run: `rtk proxy pnpm typecheck && rtk proxy pnpm lint && rtk proxy pnpm test && rtk proxy pnpm build`
 Expected: все четыре — код 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 rtk proxy pnpm exec prettier --write src/features/trade/TradeForm.tsx src/features/trade/SubmitButtons.tsx src/features/trade/EntryTpSlFields.tsx e2e/pages/TerminalPanels.ts e2e/tier1/04-trade-market.spec.ts
@@ -637,7 +637,7 @@ EOF
 - Consumes (задачи 1–2): `markPrice` в подаче диалога; из `@liq/sdk` — `validateBrackets`, `describeBracketRejection`, `describeBracketWarning`.
 - Produces: ветка на `origin`; draft-PR в `main`.
 
-- [ ] **Step 1: Написать падающие e2e**
+- [x] **Step 1: Написать падающие e2e**
 
 В `e2e/tier1/28-position-actions.spec.ts` после теста про отказ шлюза добавить:
 
@@ -696,12 +696,12 @@ test("a bracket on the right side of mark still saves", async ({
   }
 ```
 
-- [ ] **Step 2: Убедиться, что e2e падают**
+- [x] **Step 2: Убедиться, что e2e падают**
 
 Run: `rtk proxy pnpm test:e2e -- 28-position-actions`
 Expected: FAIL — первый новый тест (Save активна, строки нет). Второй новый и старые — зелёные.
 
-- [ ] **Step 3: Вердикт в диалоге**
+- [x] **Step 3: Вердикт в диалоге**
 
 В `src/features/positions/TpSlDialog.tsx` импорт из `@liq/sdk` заменить на:
 
@@ -792,12 +792,12 @@ function save() {
  * сказал бы, что заявка ушла, хотя на провод ничего не уходило.
 ```
 
-- [ ] **Step 4: Убедиться, что e2e проходят**
+- [x] **Step 4: Убедиться, что e2e проходят**
 
 Run: `rtk proxy pnpm test:e2e -- 28-position-actions`
 Expected: PASS — весь спек.
 
-- [ ] **Step 5: Полный набор гейтов**
+- [x] **Step 5: Полный набор гейтов**
 
 Run: `rtk proxy pnpm typecheck && rtk proxy pnpm lint && rtk proxy pnpm test && rtk proxy pnpm build`
 Expected: все четыре — код 0.
@@ -805,7 +805,7 @@ Expected: все четыре — код 0.
 Run: `rtk proxy pnpm test:e2e`
 Expected: весь tier-1 зелёный. Первый прогон прогревает vite — при таймауте на холодном старте перезапустить, не «чинить» тест.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 rtk proxy pnpm exec prettier --write src/features/positions/TpSlDialog.tsx e2e/pages/TerminalPanels.ts e2e/tier1/28-position-actions.spec.ts
@@ -818,7 +818,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 7: Push и draft-PR**
+- [x] **Step 7: Push и draft-PR**
 
 ```bash
 git push -u origin feat-cld/bracket-price-check
@@ -854,11 +854,18 @@ gh pr create --draft --head feat-cld/bracket-price-check \
 
 Expected: URL draft-PR.
 
-- [ ] **Step 8: Сверить пуш**
+- [x] **Step 8: Сверить пуш**
 
 Run: `~/.claude/hooks/plan-state verify-push 3`
 Expected: пуш подтверждён — `origin/feat-cld/bracket-price-check` совпадает с `HEAD`.
 
 ## Notes for next phase
 
-_(заполняется исполнителем при закрытии фазы)_
+**Закрыто 2026-09-23.** Ветка `feat-cld/bracket-price-check`, коммиты `9ce9c40` (T1), `73ce4d6` + `600102c` (T2, раунд исправлений 1), `a5ebc04` (T3); draft-PR в `main` — см. ниже.
+
+- **Отступления от текста плана.** `resultingPosition` зовёт `toSignedSize(Qty(open.size), …)` — `open.size` там `bigint`, без обёртки TS2345. В репозитории нет prettier (ни конфига, ни зависимости) — шаги `prettier --write` пропущены, гейт форматирования — lint. JSX-фрагменты плана с `;` внутри `{…}` — артефакт markdown, в коде без него. Трейлер коммитов — `Claude Opus 5.5 (1M context)`.
+- **Добавлено ревью:** e2e «switching TP/SL off drops the verdict…» — правило «тумблер погашен — вердикта нет» до него ничем не ловилось (tp/sl живут в стейте при скрытых полях).
+- **Отложено (решение контроллера, финальное ревью — SHOULD-FIX DP-007):** пока снапшот позиций/условных ордеров грузится или упал, `positions`/`conditional` = пустышки, и гейт тикета вместе с `attachBrackets` судят и размеряют скобки как у новой позиции (на Limit ещё и с `entryPrice`). Форма досталась от старого кода, окно короткое. Лечение — «не готово» на обе кнопки при `bracketsOn`, пока запросы не успешны; тест — tier-1 мир с задержанным снапшотом.
+- **Мелочи, не блокируют:** `expect(world.submittedOrders).toHaveLength(0)` без попытки клика (04, 28) ничего не ловит; цвет строки `entry-tpsl-validation` не закреплён; ветка «not-ready → пустая строка» в `bracketsNote()` без теста; `filter/join` отказов повторён в `TpSlDialog` и `legsOf` (5 строк). Спека §9 неточна: тумблер TP/SL тикета при марке 0 не гаснет (кнопки гаснут общим гейтом), Save диалога без марка активна для отмены/неизменённых ног.
+- **SDK, для monorepo:** `validateBrackets`/`bracketsPlanFor` пропускают ногу, чей триггер равен существующему, без сверки стороны/размера — при перевороте (лонг 1, продажа 3) TP, равный старому TP лонга, не судится.
+- **Окружение:** порт 5173 держал чужой vite из `perps/liqu` — e2e гонялись с `E2E_PORT=5183`. `rtk proxy pnpm test:e2e -- <file> -g …` теряет `-g`; для точечных прогонов — сырой `pnpm exec playwright test <file>`.
