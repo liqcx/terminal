@@ -238,4 +238,46 @@ test.describe("position actions", () => {
     // скобку было бы нечем.
     expect(world.submittedOrders).toHaveLength(0);
   });
+
+  test("a take-profit below mark blocks Save and names the reason", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.editTpSl(MARKET.id).click();
+    // Марк 70 000: такой тейк у длинной сработал бы сразу и закрыл бы её.
+    await userInfo.tpslTp.fill("60000");
+
+    await expect(userInfo.tpslSave).toBeDisabled();
+    await expect(userInfo.tpslValidation).toHaveText(
+      "Take profit: must be above mark",
+    );
+    expect(world.submittedOrders).toHaveLength(0);
+  });
+
+  test("a bracket on the right side of mark still saves", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.editTpSl(MARKET.id).click();
+    // Гейт не должен запирать законную правку: тейк выше марка подаётся.
+    await userInfo.tpslTp.fill("95000");
+
+    await expect(userInfo.tpslValidation).toBeHidden();
+    await userInfo.tpslSave.click();
+    await expect.poll(() => world.submittedOrders.length).toBe(1);
+  });
 });

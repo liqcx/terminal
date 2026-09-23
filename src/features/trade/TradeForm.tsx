@@ -1,13 +1,15 @@
 import {
   acceptablePrice,
+  type BracketsVerdict,
   Bps,
+  describeBracketRejection,
   describeRejection,
   describeWarning,
   positionBrackets,
   Price,
   Qty,
   Side,
-  toSignedSize,
+  validateBrackets,
 } from "@liq/sdk";
 import {
   useAccountId,
@@ -33,6 +35,7 @@ import { ExecutionFlags } from "./ExecutionFlags";
 import { OrderPriceField } from "./OrderPriceField";
 import { OrderSummary } from "./OrderSummary";
 import { QuantityField } from "./QuantityField";
+import { resultingPosition } from "./resultingPosition";
 import { shouldAdoptLevel } from "./shouldAdoptLevel";
 import { SizeSlider } from "./SizeSlider";
 import { SubmitButtons } from "./SubmitButtons";
@@ -62,6 +65,8 @@ const EMPTY_ORDERS: NonNullable<
 const EMPTY_POSITIONS: NonNullable<
   ReturnType<typeof useEnrichedPositions>["data"]
 > = [];
+/** Скобок нет — пока рынок не выбран. Стабильная ссылка: литерал гонял бы мемо. */
+const NO_BRACKETS = { takeProfit: null, stopLoss: null };
 
 export function TradeForm() {
   const { marketId, market, allMarketIds } = useSelectedMarket();
@@ -133,6 +138,99 @@ export function TradeForm() {
   }
   const tabPriceReady = parsedTabPrice() > 0n;
 
+  const openPosition = positions.find((p) => p.marketId === marketId);
+  /**
+   * Вторая опорная цена — только у лимитного входа без открытой позиции.
+   *
+   * @remarks Стоп между лимитной ценой и марком сгорел бы раньше, чем вход
+   * исполнится, и по связке снял бы тейк. Когда позиция уже открыта, скобки
+   * принадлежат ей, и опорная цена одна: стоп живой позиции законно стоит по
+   * эту сторону от ещё не сработавшего лимита.
+   */
+  const entryPrice =
+    tab === "Limit" && openPosition === undefined
+      ? Price(parsedTabPrice())
+      : undefined;
+
+  const tpPrice = Price(parseOrZero(Price.parse, tp));
+  const slPrice = Price(parseOrZero(Price.parse, sl));
+  const brackets =
+    marketId === undefined
+      ? NO_BRACKETS
+      : positionBrackets(marketId, conditional);
+  // Скобки судятся, только когда их собираются поставить: погашенный тумблер и
+  // два пустых поля — это «скобок нет», а не «скобки плохие».
+  const bracketsOn = tpslOn && (tpPrice > 0n || slPrice > 0n);
+
+  /**
+   * Годятся ли скобки позиции, которой станет рынок после входа этой стороной.
+   *
+   * @remarks Сторон две, и вердикт у них разный: тейк ниже цены запрещён
+   * длинной и нормален короткой. Поэтому судится каждая кнопка отдельно, а не
+   * «тикет целиком».
+   *
+   * Судит экран, а не только действие SDK: скобки входа подаются после того,
+   * как шлюз принял вход, и отказ там оставил бы позицию без стопа.
+   */
+  function verdictFor(side: Side): BracketsVerdict | null {
+    if (!bracketsOn || marketId === undefined) return null;
+    return validateBrackets({
+      position: resultingPosition(
+        marketId,
+        openPosition,
+        side === Side.BUY
+          ? sizing.summary.long.sizeDelta
+          : sizing.summary.short.sizeDelta,
+      ),
+      brackets,
+      takeProfit: tpPrice,
+      stopLoss: slPrice,
+      markPrice: Price(markPrice),
+      entryPrice,
+    });
+  }
+
+  const longVerdict = verdictFor(Side.BUY);
+  const shortVerdict = verdictFor(Side.SELL);
+  const longOk = longVerdict?.ok !== false;
+  const shortOk = shortVerdict?.ok !== false;
+
+  /** Отказы одной стороны одной строкой; пусто — сторона годна или судить нечем. */
+  function legsOf(label: string, verdict: BracketsVerdict | null): string {
+    const legs = [
+      describeBracketRejection(verdict?.takeProfit ?? null),
+      describeBracketRejection(verdict?.stopLoss ?? null),
+    ]
+      .filter((t) => t !== undefined)
+      .join(" · ");
+    return legs === "" ? "" : `${label} — ${legs}`;
+  }
+
+  /**
+   * Одна строка под полями TP/SL.
+   *
+   * @remarks Три состояния: скобки годятся обеим кнопкам — молчим; годятся
+   * одной — приглушённая подсказка, какой именно (она объясняет, почему вторая
+   * кнопка погасла); ни одной — причина по каждой стороне.
+   *
+   * Текста может не быть и при отказе: `not-ready` (марка ещё нет) молчит
+   * намеренно, как `describeRejection` у ордера. Пустую красную строку в этом
+   * случае не рисуем — кнопки уже погашены общим гейтом.
+   */
+  function bracketsNote(): { text: string; bad: boolean } | null {
+    if (longOk && shortOk) return null;
+    if (longOk || shortOk) {
+      return {
+        text: `TP/SL fit a ${longOk ? "long" : "short"} only`,
+        bad: false,
+      };
+    }
+    const text = [legsOf("Long", longVerdict), legsOf("Short", shortVerdict)]
+      .filter((t) => t !== "")
+      .join(" · ");
+    return text === "" ? null : { text, bad: true };
+  }
+
   const disabled =
     pending ||
     accountId === undefined ||
@@ -151,8 +249,8 @@ export function TradeForm() {
    * пользователь считал заменённой.
    *
    * Позиция здесь ещё дошлюзовая: вход принят, но не рассчитан, поэтому её
-   * размер складывается с размером входа вручную. Знак приводит
-   * `toSignedSize` — часть источников несёт размер по модулю.
+   * размер с размером входа складывает `resultingPosition` — там же знак
+   * приводит `toSignedSize`, часть источников несёт размер по модулю.
    *
    * Куда смотрит триггер, чем закрывается позиция и в какой связке стоят ноги,
    * решает действие SDK. Подаются они после того, как шлюз принял вход, то есть
@@ -160,17 +258,18 @@ export function TradeForm() {
    */
   function attachBrackets(entryDelta: Qty) {
     if (!tpslOn || accountId === undefined || marketId === undefined) return;
-    const open = positions.find((p) => p.marketId === marketId);
-    const size = Qty(
-      (open ? toSignedSize(open.size, open.side) : 0n) + entryDelta,
-    );
     // `mutate`, как и вход: отказ приходит в `applyBrackets.error` и печатается
     // строкой `trade-error`.
     applyBrackets.mutate({
-      position: { marketId, side: size < 0n ? Side.SELL : Side.BUY, size },
-      brackets: positionBrackets(marketId, conditional),
-      takeProfit: Price(parseOrZero(Price.parse, tp)),
-      stopLoss: Price(parseOrZero(Price.parse, sl)),
+      position: resultingPosition(marketId, openPosition, entryDelta),
+      brackets,
+      takeProfit: tpPrice,
+      stopLoss: slPrice,
+      // Тот же марк, по которому судит гейт: к этому моменту цена могла уйти,
+      // и тогда действие отклонит ногу — законный отказ, он виден в
+      // `trade-error` с именем ноги.
+      markPrice: Price(markPrice),
+      entryPrice,
     });
   }
 
@@ -330,6 +429,7 @@ export function TradeForm() {
           setTp={setTp}
           sl={sl}
           setSl={setSl}
+          note={bracketsNote()}
         />
       </div>
 
@@ -358,8 +458,8 @@ export function TradeForm() {
         ) : (
           <SubmitButtons
             onSubmit={submit}
-            disabled={disabled}
-            pending={pending}
+            buyDisabled={disabled || !longOk}
+            sellDisabled={disabled || !shortOk}
           />
         )}
 

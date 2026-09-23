@@ -1,4 +1,9 @@
-import { Price } from "@liq/sdk";
+import {
+  describeBracketRejection,
+  describeBracketWarning,
+  Price,
+  validateBrackets,
+} from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
 import { wadToFixed } from "@liq/core";
 import { useState } from "react";
@@ -27,6 +32,10 @@ import type { PositionRow } from "./usePositionRows";
  * План правки, порядок «подача, потом отмена», связка ног и сбор отказов живут
  * в `useApplyBracketsMutation`: то же действие зовёт тикет для скобок входа, и
  * второй копии правила у терминала больше нет.
+ *
+ * Отказ проверки и отказ шлюза стоят разными строками: `tpsl-validation` —
+ * «не отправили», `tpsl-error` — «отправили, и шлюз отказал». Смешав их, экран
+ * сказал бы, что заявка ушла, хотя на провод ничего не уходило.
  */
 export function TpSlDialog({
   row,
@@ -48,6 +57,26 @@ export function TpSlDialog({
       : "",
   );
 
+  const tpPrice = Price(parseOrZero(Price.parse, tp));
+  const slPrice = Price(parseOrZero(Price.parse, sl));
+  // Марк строки живой: таблица обновляет его вместе с ценами, и вердикт
+  // пересчитывается — скобка, законная минуту назад, гаснет вместе с ценой.
+  const verdict = validateBrackets({
+    position: row.position,
+    brackets: row.brackets,
+    takeProfit: tpPrice,
+    stopLoss: slPrice,
+    markPrice: Price(row.markPrice ?? 0n),
+    liquidationPrice: row.position.liquidationPrice,
+  });
+  const rejection = [
+    describeBracketRejection(verdict.takeProfit),
+    describeBracketRejection(verdict.stopLoss),
+  ]
+    .filter((t) => t !== undefined)
+    .join(" · ");
+  const warning = describeBracketWarning(verdict.warn);
+
   // `mutate` (не `mutateAsync`): отказ показывается из `applyBrackets.error`
   // ниже, а диалог остаётся открытым — закрывать его поверх ошибки значило бы
   // прятать её.
@@ -56,10 +85,11 @@ export function TpSlDialog({
       {
         position: row.position,
         brackets: row.brackets,
-        // Пустое поле — `0n`, то есть «снять». `parseOrZero` отдаёт голый
-        // `bigint`, а действие ждёт `Price`, поэтому бренд возвращается явно.
-        takeProfit: Price(parseOrZero(Price.parse, tp)),
-        stopLoss: Price(parseOrZero(Price.parse, sl)),
+        // Пустое поле — `0n`, то есть «снять».
+        takeProfit: tpPrice,
+        stopLoss: slPrice,
+        // Марк строки: по нему же судит гейт Save ниже.
+        markPrice: Price(row.markPrice ?? 0n),
       },
       { onSuccess: () => onClose() },
     );
@@ -109,6 +139,24 @@ export function TpSlDialog({
           Empty field removes the bracket. Orders are reduce-only.
         </p>
 
+        {rejection !== "" && (
+          <p
+            className="mt-2 text-[11px] text-short"
+            data-testid="tpsl-validation"
+          >
+            {rejection}
+          </p>
+        )}
+
+        {warning && (
+          <p
+            className="mt-2 text-[11px] text-muted"
+            data-testid="tpsl-warning"
+          >
+            {warning}
+          </p>
+        )}
+
         {applyBrackets.error && (
           <p className="mt-2 text-[11px] text-short" data-testid="tpsl-error">
             {applyBrackets.error.message}
@@ -126,7 +174,9 @@ export function TpSlDialog({
           </Button>
           <Button
             className="flex-1"
-            disabled={applyBrackets.isPending || accountId === undefined}
+            disabled={
+              applyBrackets.isPending || accountId === undefined || !verdict.ok
+            }
             onClick={save}
             data-testid="tpsl-save"
           >

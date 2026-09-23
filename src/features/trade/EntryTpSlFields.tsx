@@ -15,12 +15,15 @@ export function EntryTpSlFields({
   setTp,
   sl,
   setSl,
+  note,
 }: {
   enabled: boolean;
   tp: string;
   setTp: (v: string) => void;
   sl: string;
   setSl: (v: string) => void;
+  /** Что сказать под полями: подсказка о стороне или причина отказа. */
+  note: { text: string; bad: boolean } | null;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -50,6 +53,16 @@ export function EntryTpSlFields({
               data-testid="entry-sl-input"
             />
           </div>
+          {note && (
+            <p
+              className={
+                note.bad ? "text-[10px] text-short" : "text-[10px] text-muted"
+              }
+              data-testid="entry-tpsl-validation"
+            >
+              {note.text}
+            </p>
+          )}
         </div>
       )}
     </div>
