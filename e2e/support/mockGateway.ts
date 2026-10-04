@@ -48,11 +48,16 @@ function send(route: Route, body: unknown, status = 200): Promise<void> {
   });
 }
 
-function error(route: Route, status: number, code = "internal"): Promise<void> {
+function error(
+  route: Route,
+  status: number,
+  code = "internal",
+  message = code,
+): Promise<void> {
   return route.fulfill({
     status,
     contentType: "application/json",
-    body: JSON.stringify({ error: { code, message: code } }),
+    body: JSON.stringify({ error: { code, message } }),
   });
 }
 
@@ -74,7 +79,7 @@ async function faulted(
 ): Promise<boolean> {
   const status = world.faults.routeStatus[key];
   if (status === undefined) return false;
-  await error(route, status, code);
+  await error(route, status, code, world.faults.routeMessage[key]);
   return true;
 }
 

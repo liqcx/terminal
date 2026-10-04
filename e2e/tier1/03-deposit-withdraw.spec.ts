@@ -387,14 +387,16 @@ test.describe("deposit & withdraw", () => {
     const { market, withdraw } = await enterTerminal(page, world, () => {
       const w = readyWorld();
       w.accounts[0].debt = 168n * WAD;
-      w.walletUsdc = 0n;
+      w.walletUsdc = 100n * 10n ** 6n;
       return w;
     });
 
     await market.openWithdraw();
     await withdraw.amountInput.fill("1");
     await expect(withdraw.walletShort).toBeVisible();
-    await expect(withdraw.walletShort).toContainText("$168.00");
+    await expect(withdraw.walletShort).toHaveText(
+      "Not enough USDC in your wallet to repay the $168.00 debt (wallet: $100.00). Top up the wallet first.",
+    );
     await expect(withdraw.submitButton).toBeDisabled();
   });
 

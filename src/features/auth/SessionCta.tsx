@@ -70,7 +70,10 @@ export function SessionCta({
   );
 }
 
-/** Surfaces a mutation error inline, worded by `humanizeError`, so a failed CTA isn't a silent dead-end. */
+/**
+ * Surfaces a mutation error inline, worded by `humanizeError`, so a failed CTA
+ * isn't a silent dead-end.
+ */
 export function ErrorLine({
   error,
   testid,
@@ -78,7 +81,10 @@ export function ErrorLine({
 }: {
   error: Error | null;
   testid: string;
-  /** Переопределяет {@link humanizeError} — например, чтобы назвать конкретную причину иначе. */
+  /**
+   * Переопределяет {@link humanizeError} — например, чтобы назвать конкретную
+   * причину иначе.
+   */
   formatMessage?: (error: Error) => string;
 }) {
   if (!error) return null;

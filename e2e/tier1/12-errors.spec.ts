@@ -22,6 +22,22 @@ test.describe("error states", () => {
     await expect(trade.sizeInput).toHaveValue("0.5");
   });
 
+  test("a gateway margin rejection is printed in sums, not wei (TRM-42)", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+    world.faults.routeStatus.submitOrder = 422;
+    world.faults.routeMessage.submitOrder =
+      "Insufficient margin: available=38739790679892706434, locked=0, free=38739790679892706434, required=38369917000500000000";
+
+    await trade.setSize("0.5");
+    await trade.submit();
+
+    await expect(trade.tradeError).toContainText("Insufficient margin: available");
+    await expect(trade.tradeError).not.toHaveText(/\d{12,}/);
+  });
+
   test("a failed order submit can be retried once the fault clears", async ({
     page,
     world,

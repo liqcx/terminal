@@ -288,6 +288,12 @@ export interface MockWorld {
      * `FaultRoute`.
      */
     routeStatus: Partial<Record<FaultRoute, number>>;
+    /**
+     * Текст отказа для маршрута из `routeStatus` — `error.message` в теле
+     * ответа шлюза. Нет — тело называет только код. Нужен, чтобы проверить,
+     * как терминал печатает настоящий отказ (TRM-42).
+     */
+    routeMessage: Partial<Record<FaultRoute, string>>;
     // chain: make modifyCollateral (deposit/withdraw) txs revert on-chain
     collateralReverts?: boolean;
     // wallet: reject the next wallet_switchEthereumChain / every eth_sendTransaction
@@ -543,7 +549,11 @@ export function freshWorld(opts: ScenarioOptions = {}): MockWorld {
     // `routeStatus` всегда есть: спека дописывает отказ после старта мира
     // (`world.faults.routeStatus.price = 500`), и опциональная запись потребовала
     // бы `?.` в каждой такой строке.
-    faults: { ...opts.faults, routeStatus: { ...opts.faults?.routeStatus } },
+    faults: {
+      ...opts.faults,
+      routeStatus: { ...opts.faults?.routeStatus },
+      routeMessage: { ...opts.faults?.routeMessage },
+    },
     submittedOrders: [],
     cancelledOrderIds: [],
     lastCollateralDelta: 0n,
