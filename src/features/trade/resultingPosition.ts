@@ -1,4 +1,4 @@
-import { Qty, Side, toSignedSize } from "@liq/sdk";
+import { Qty, Side } from "@liq/sdk";
 
 /**
  * Позиция, которой станет рынок после входа этой стороной.
@@ -10,17 +10,15 @@ import { Qty, Side, toSignedSize } from "@liq/sdk";
  * Один расчёт на гейт кнопок и на подачу: разойдясь, они дали бы активную
  * кнопку, чьи скобки действие тут же отклонит — уже после принятого входа.
  *
- * Знак приводит `toSignedSize`: часть источников несёт размер по модулю.
- * Нулевой размер (полное закрытие) — не особый случай: ног у такой позиции
- * нет, и `validateBrackets` отвечает пустым вердиктом.
+ * Размер открытой позиции знаковый у всех источников SDK с 0.63 (deep-07),
+ * поэтому складывается как есть. Нулевой размер (полное закрытие) — не особый
+ * случай: закрывать нечем, и `bracketsPlanFor` ног не подаёт и не судит.
  */
 export function resultingPosition(
   marketId: bigint,
-  open: { size: bigint; side: Side } | undefined,
+  open: { size: bigint } | undefined,
   entryDelta: Qty,
 ): { marketId: bigint; side: Side; size: Qty } {
-  const size = Qty(
-    (open ? toSignedSize(Qty(open.size), open.side) : 0n) + entryDelta,
-  );
+  const size = Qty((open?.size ?? 0n) + entryDelta);
   return { marketId, side: size < 0n ? Side.SELL : Side.BUY, size };
 }

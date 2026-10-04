@@ -1,6 +1,7 @@
 import {
   acceptablePrice,
-  type BracketsVerdict,
+  type BracketsPlan,
+  bracketsPlanFor,
   Bps,
   describeBracketRejection,
   describeRejection,
@@ -9,7 +10,6 @@ import {
   Price,
   Qty,
   Side,
-  validateBrackets,
 } from "@liq/sdk";
 import {
   useAccountId,
@@ -172,9 +172,9 @@ export function TradeForm() {
    * Судит экран, а не только действие SDK: скобки входа подаются после того,
    * как шлюз принял вход, и отказ там оставил бы позицию без стопа.
    */
-  function verdictFor(side: Side): BracketsVerdict | null {
+  function verdictFor(side: Side): BracketsPlan | null {
     if (!bracketsOn || marketId === undefined) return null;
-    return validateBrackets({
+    return bracketsPlanFor({
       position: resultingPosition(
         marketId,
         openPosition,
@@ -192,15 +192,15 @@ export function TradeForm() {
 
   const longVerdict = verdictFor(Side.BUY);
   const shortVerdict = verdictFor(Side.SELL);
-  const longOk = longVerdict?.ok !== false;
-  const shortOk = shortVerdict?.ok !== false;
+  // Ни одного отказа, включая `not-ready` (марка нет): так судил и прежний
+  // `verdict.ok` (SDK 0.57), и кнопка без марка гаснет, а не подаёт вслепую.
+  const longOk = (longVerdict?.rejected.length ?? 0) === 0;
+  const shortOk = (shortVerdict?.rejected.length ?? 0) === 0;
 
   /** Отказы одной стороны одной строкой; пусто — сторона годна или судить нечем. */
-  function legsOf(label: string, verdict: BracketsVerdict | null): string {
-    const legs = [
-      describeBracketRejection(verdict?.takeProfit ?? null),
-      describeBracketRejection(verdict?.stopLoss ?? null),
-    ]
+  function legsOf(label: string, verdict: BracketsPlan | null): string {
+    const legs = (verdict?.rejected ?? [])
+      .map((rejection) => describeBracketRejection(rejection))
       .filter((t) => t !== undefined)
       .join(" · ");
     return legs === "" ? "" : `${label} — ${legs}`;
@@ -249,8 +249,7 @@ export function TradeForm() {
    * пользователь считал заменённой.
    *
    * Позиция здесь ещё дошлюзовая: вход принят, но не рассчитан, поэтому её
-   * размер с размером входа складывает `resultingPosition` — там же знак
-   * приводит `toSignedSize`, часть источников несёт размер по модулю.
+   * размер с размером входа складывает `resultingPosition`.
    *
    * Куда смотрит триггер, чем закрывается позиция и в какой связке стоят ноги,
    * решает действие SDK. Подаются они после того, как шлюз принял вход, то есть
