@@ -17,7 +17,7 @@
 - Ветка `feat-cld/f1-visibility`, worktree `/home/alex/Work/perps/terminal/.worktrees/f1-visibility` (создан от `origin/main@adbda7a`). Все команды — из корня worktree. Основной чекаут `/home/alex/Work/perps/terminal` не трогать; `git stash` не использовать. У ветки нет upstream — пушить только `git push -u origin feat-cld/f1-visibility` (задача 3).
 - **Node — из `.prototools` (24.14.0), не из mise (26).** На Node 26 глобальный `localStorage` ломает `src/stores/__tests__/useTerminalUiStore.test.ts` (6 падений, `Cannot read properties of undefined (reading 'setItem')`). Каждая команда с `pnpm`/`node` — с префиксом `export PATH="$HOME/.proto/tools/node/24.14.0/bin:$PATH" &&`.
 - Вывод `pnpm` с кириллицей роняет хук rtk — запускать через `rtk proxy <команда>`.
-- **e2e — только через Docker-раннер** `bash /home/alex/tmp/claude-1000/-home-alex-Work-perps-terminal/2fa6167c-643b-4de4-9550-0f1340f86326/scratchpad/e2e-docker.sh [файлы спеков]`: на хосте (Ubuntu 26.04) нет системных библиотек Chromium, `pnpm test:e2e` не стартует. Раннер поднимает vite на хосте и гоняет Playwright в образе `mcr.microsoft.com/playwright:v1.60.0-noble`.
+- **e2e — только через Docker-раннер** `bash /home/alex/Work/perps/terminal/.worktrees/e2e-docker.sh [файлы спеков]`: на хосте (Ubuntu 26.04) нет системных библиотек Chromium, `pnpm test:e2e` не стартует. Раннер поднимает vite на хосте (Node из `.prototools`, переменные `VITE_*` — как в `playwright.config.ts`) и гоняет Playwright в образе `mcr.microsoft.com/playwright:v1.60.0-noble` с `--network host`; конфиг переиспользует сервер, пока `CI` не задан. Файл лежит в исключённом из git каталоге `.worktrees` и в коммит не входит; пропал — восстановить по этому описанию.
 - Базовая линия (Node 24.14.0, `origin/main@adbda7a`): `rtk proxy pnpm test` — 166 тестов, 27 файлов, все зелёные; e2e через раннер — 186 passed (~1,1 мин).
 - Гейты в конце каждой задачи, где менялся код: `rtk proxy pnpm typecheck`, `rtk proxy pnpm lint`, `rtk proxy pnpm test`, `rtk proxy pnpm build`, затем e2e-раннер целиком (без аргументов).
 - `.npmrc` в корне worktree — копия с токеном реестра, в `.gitignore`; никогда не добавлять. Коммитить только явно перечисленные файлы (`git add <файлы>`), никогда `git add -A`. Каждый коммит завершается строкой `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Pre-commit хук обязателен — `--no-verify` не использовать.
@@ -220,7 +220,7 @@ Expected: размер позиции печатается через `abs(...)`
 ```bash
 export PATH="$HOME/.proto/tools/node/24.14.0/bin:$PATH"
 rtk proxy pnpm typecheck && rtk proxy pnpm lint && rtk proxy pnpm test && rtk proxy pnpm build
-bash /home/alex/tmp/claude-1000/-home-alex-Work-perps-terminal/2fa6167c-643b-4de4-9550-0f1340f86326/scratchpad/e2e-docker.sh
+bash /home/alex/Work/perps/terminal/.worktrees/e2e-docker.sh
 ```
 
 Expected: всё зелёное; unit — 166 тестов (число не меняется: один тест заменён); e2e — как в базовой линии, включая гейты скобок `04-trade-market.spec.ts` и `28-position-actions.spec.ts`.
@@ -394,10 +394,10 @@ Expected: PASS (4 теста).
 
 - [ ] **Step 6: `humanizeError` в остальных местах**
 
-1. `src/features/trade/TradeForm.tsx`: `{error.message}` (строка `trade-error`) → `{humanizeError(error)}`; импорт `humanizeError` из `@liq/core` (в файле уже есть импорты из `@liq/core`? если нет — новая строка `import { humanizeError } from "@liq/core";`).
+1. `src/features/trade/TradeForm.tsx`: `{error.message}` (строка `trade-error`) → `{humanizeError(error)}`; импорт: `import { sanitizeDecimal } from "@liq/core";` (строка 24) → `import { humanizeError, sanitizeDecimal } from "@liq/core";`.
 2. `src/features/positions/TpSlDialog.tsx`: `{applyBrackets.error.message}` → `{humanizeError(applyBrackets.error)}`; в импорт `import { wadToFixed } from "@liq/core";` добавить `humanizeError`.
-3. `src/features/positions/PositionsTable.tsx`: `setError(e instanceof Error ? e.message : String(e));` → `setError(humanizeError(e));`; импорт из `@liq/core`.
-4. `src/features/account/FaucetDialog.tsx`: `{state.error.message}` → `{humanizeError(state.error)}`, `{claim.error.message}` → `{humanizeError(claim.error)}`; импорт.
+3. `src/features/positions/PositionsTable.tsx`: `setError(e instanceof Error ? e.message : String(e));` → `setError(humanizeError(e));`; импорт: строка 2 → `import { formatQty, formatUsd, humanizeError } from "@liq/core";`.
+4. `src/features/account/FaucetDialog.tsx`: `{state.error.message}` → `{humanizeError(state.error)}`, `{claim.error.message}` → `{humanizeError(claim.error)}`; импорт: строка 1 → `import { humanizeError, USDC_DECIMALS } from "@liq/core";`.
 5. `src/features/auth/SessionCta.tsx`, `ErrorLine`:
 
 ```tsx
@@ -405,7 +405,7 @@ Expected: PASS (4 теста).
   formatMessage?: (error: Error) => string;
 ```
 
-и тело `{formatMessage ? formatMessage(error) : humanizeError(error)}`; импорт `humanizeError` из `@liq/core`. TSDoc функции: `/** Surfaces a mutation error inline, worded by \`humanizeError\`, so a failed CTA isn't a silent dead-end. */`.
+и тело `{formatMessage ? formatMessage(error) : humanizeError(error)}`; импорта из `@liq/core` в файле нет — новая строка `import { humanizeError } from "@liq/core";` в группе пакетных импортов. TSDoc функции: `/** Surfaces a mutation error inline, worded by \`humanizeError\`, so a failed CTA isn't a silent dead-end. */`.
 
 Run: `rtk proxy rg -n "error\.message|e\.message|claim\.error\.message|String\(e\)" src --glob '!**/__tests__/**'`
 Expected: пусто.
@@ -467,7 +467,7 @@ Expected: пусто.
 
 Если `formatUsd` печатает долг иначе, чем `$168.00`, — взять строку из соседнего `debtNotice` (тот же `formatUsd`) и подставить её.
 
-Run: `bash /home/alex/tmp/claude-1000/-home-alex-Work-perps-terminal/2fa6167c-643b-4de4-9550-0f1340f86326/scratchpad/e2e-docker.sh e2e/tier1/03-deposit-withdraw.spec.ts e2e/tier1/12-errors.spec.ts`
+Run: `bash /home/alex/Work/perps/terminal/.worktrees/e2e-docker.sh e2e/tier1/03-deposit-withdraw.spec.ts e2e/tier1/12-errors.spec.ts`
 Expected: PASS. До шага 5 первый новый тест падает (кнопка активна) — проверить это, временно закомментировав `blockedReason` в `WithdrawDialog`, и вернуть.
 
 - [ ] **Step 8: Гейты**
@@ -475,7 +475,7 @@ Expected: PASS. До шага 5 первый новый тест падает (�
 ```bash
 export PATH="$HOME/.proto/tools/node/24.14.0/bin:$PATH"
 rtk proxy pnpm typecheck && rtk proxy pnpm lint && rtk proxy pnpm test && rtk proxy pnpm build
-bash /home/alex/tmp/claude-1000/-home-alex-Work-perps-terminal/2fa6167c-643b-4de4-9550-0f1340f86326/scratchpad/e2e-docker.sh
+bash /home/alex/Work/perps/terminal/.worktrees/e2e-docker.sh
 ```
 
 Expected: всё зелёное; unit — 170 тестов (166 + 4); e2e — базовая линия + 2. Тесты, которые проверяли строку ошибки текстом (`04-trade-market.spec.ts:252`, `28-position-actions.spec.ts:214` — «Take profit»), проходят без правок: `humanizeError` такие строки не меняет.
@@ -1033,7 +1033,7 @@ test.describe("order outcome toasts", () => {
 ```
 
 
-Run: `bash /home/alex/tmp/claude-1000/-home-alex-Work-perps-terminal/2fa6167c-643b-4de4-9550-0f1340f86326/scratchpad/e2e-docker.sh e2e/tier1/31-order-outcome-toasts.spec.ts e2e/tier1/11-live-sse.spec.ts e2e/tier1/09-orders-cancel.spec.ts`
+Run: `bash /home/alex/Work/perps/terminal/.worktrees/e2e-docker.sh e2e/tier1/31-order-outcome-toasts.spec.ts e2e/tier1/11-live-sse.spec.ts e2e/tier1/09-orders-cancel.spec.ts`
 Expected: PASS (7 новых + существующие). Проверка, что спек ловит поломку: временно убрать `<OrderOutcomeToasts />` из `App.tsx` — тесты тостов падают, тест TRIGGERED проходит; вернуть.
 
 - [ ] **Step 8: Гейты**
@@ -1041,7 +1041,7 @@ Expected: PASS (7 новых + существующие). Проверка, чт
 ```bash
 export PATH="$HOME/.proto/tools/node/24.14.0/bin:$PATH"
 rtk proxy pnpm typecheck && rtk proxy pnpm lint && rtk proxy pnpm test && rtk proxy pnpm build
-bash /home/alex/tmp/claude-1000/-home-alex-Work-perps-terminal/2fa6167c-643b-4de4-9550-0f1340f86326/scratchpad/e2e-docker.sh
+bash /home/alex/Work/perps/terminal/.worktrees/e2e-docker.sh
 ```
 
 Expected: всё зелёное; unit — 173 теста (170 + 3); e2e — базовая линия + 2 (задача 2) + 7.
