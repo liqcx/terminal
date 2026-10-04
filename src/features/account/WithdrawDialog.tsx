@@ -3,6 +3,7 @@ import {
   useAccountId,
   useAvailableMarginQuery,
   useCollateralAmountQuery,
+  useDepositableBalance,
   useWithdrawMutation,
 } from "@liq/react";
 import { formatUsd } from "@liq/core";
@@ -11,6 +12,7 @@ import {
   CollateralAmountDialog,
   useCollateralSymbol,
 } from "./CollateralAmountDialog";
+import { repayShortfall } from "./repayShortfall";
 
 export function WithdrawDialog({
   open,
@@ -42,6 +44,12 @@ export function WithdrawDialog({
   // ключом, и два экрана показывали разный долг.
   const { data: debt } = useAccountDebtQuery();
   const hasDebt = debt !== undefined && debt > 0n;
+
+  // Долг гасится из USDC кошелька при любом выбранном токене вывода
+  // (`RepayBuilder` SDK). Без проверки пустой кошелёк узнавал об этом
+  // ревёртом симуляции (TRM-29).
+  const { data: wallet } = useDepositableBalance("USDC");
+  const shortfall = repayShortfall(debt, hasDebt ? wallet?.token : undefined);
 
   // Потолок вывода. Без долга — withdrawable (≤ available; ниже при открытых
   // позициях). С долгом протокол отвечает withdrawable = 0, а repay снимает
@@ -80,6 +88,15 @@ export function WithdrawDialog({
             until repaid — this repays your debt (from wallet funds) and
             withdraws in one transaction.
           </div>
+        )
+      }
+      blockedReason={
+        shortfall === null ? null : (
+          <span data-testid="withdraw-wallet-short">
+            Not enough USDC in your wallet to repay the {formatUsd(debt ?? 0n)}{" "}
+            debt (wallet: {formatUsd(wallet?.token ?? 0n)}). Top up the wallet
+            first.
+          </span>
         )
       }
       submitLabel={hasDebt ? "Repay & Withdraw" : "Withdraw"}

@@ -200,6 +200,11 @@ export interface MockWorld {
    * wallet_switchEthereumChain rewrites it and emits chainChanged. */
   chainId: number;
   accounts: AccountFixture[];
+  /**
+   * USDC в кошельке — сырой, 6 знаков. Нет — миллион: депозиту хватает на
+   * всё. Задаётся, чтобы проверить гейт погашения долга (TRM-29).
+   */
+  walletUsdc?: bigint;
   /** index price (onchain indexPrice + entry-price math), 18-dec */
   indexPrice: bigint;
   /** gateway mark price (GET /markets/:id/price), 18-dec */

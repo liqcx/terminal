@@ -5,7 +5,7 @@ import {
   Price,
 } from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
-import { wadToFixed } from "@liq/core";
+import { humanizeError, wadToFixed } from "@liq/core";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -157,7 +157,7 @@ export function TpSlDialog({
 
         {applyBrackets.error && (
           <p className="mt-2 text-[11px] text-short" data-testid="tpsl-error">
-            {applyBrackets.error.message}
+            {humanizeError(applyBrackets.error)}
           </p>
         )}
 

@@ -1,5 +1,5 @@
 import { abs, Side } from "@liq/sdk";
-import { formatQty, formatUsd } from "@liq/core";
+import { formatQty, formatUsd, humanizeError } from "@liq/core";
 import { createColumnHelper } from "@tanstack/react-table";
 import { Pencil, X } from "lucide-react";
 import { useState } from "react";
@@ -272,7 +272,7 @@ export function PositionsTable() {
       }
       setTarget(EMPTY_TARGET);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(humanizeError(e));
     }
   }
 

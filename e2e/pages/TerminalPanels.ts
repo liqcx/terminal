@@ -426,6 +426,7 @@ export class WithdrawDialog {
   readonly cancelButton: Locator;
   readonly error: Locator;
   readonly debtNotice: Locator;
+  readonly walletShort: Locator;
   readonly balance: Locator;
   readonly maxButton: Locator;
   readonly validation: Locator;
@@ -437,6 +438,7 @@ export class WithdrawDialog {
     this.cancelButton = page.getByTestId("withdraw-cancel-button");
     this.error = page.getByTestId("withdraw-error");
     this.debtNotice = page.getByTestId("withdraw-debt-notice");
+    this.walletShort = page.getByTestId("withdraw-wallet-short");
     this.balance = page.getByTestId("withdraw-balance");
     this.maxButton = page.getByTestId("withdraw-max-button");
     this.validation = page.getByTestId("withdraw-validation");

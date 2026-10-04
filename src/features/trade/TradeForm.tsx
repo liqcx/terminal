@@ -21,7 +21,7 @@ import {
   useSessionStage,
   useTradeStore,
 } from "@liq/react";
-import { sanitizeDecimal } from "@liq/core";
+import { humanizeError, sanitizeDecimal } from "@liq/core";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -477,7 +477,7 @@ export function TradeForm() {
         )}
         {error && (
           <p className="text-[10px] text-short" data-testid="trade-error">
-            {error.message}
+            {humanizeError(error)}
           </p>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { USDC_DECIMALS } from "@liq/core";
+import { humanizeError, USDC_DECIMALS } from "@liq/core";
 import {
   useClaimFaucetMutation,
   useFaucetState,
@@ -69,7 +69,7 @@ function FaucetBody() {
   if (state.isError) {
     return (
       <p className="text-[11px] text-short" data-testid="faucet-error">
-        {state.error.message}
+        {humanizeError(state.error)}
       </p>
     );
   }
@@ -126,7 +126,7 @@ function FaucetBody() {
       })}
       {claim.error && (
         <p className="text-[11px] text-short" data-testid="faucet-claim-error">
-          {claim.error.message}
+          {humanizeError(claim.error)}
         </p>
       )}
     </div>

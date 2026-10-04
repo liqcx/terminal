@@ -1,3 +1,4 @@
+import { humanizeError } from "@liq/core";
 import {
   useAccountId,
   useCreateAccountMutation,
@@ -69,7 +70,7 @@ export function SessionCta({
   );
 }
 
-/** Surfaces a mutation error inline so a failed CTA isn't a silent dead-end. */
+/** Surfaces a mutation error inline, worded by `humanizeError`, so a failed CTA isn't a silent dead-end. */
 export function ErrorLine({
   error,
   testid,
@@ -77,13 +78,13 @@ export function ErrorLine({
 }: {
   error: Error | null;
   testid: string;
-  /** Переопределяет `error.message` — например, чтобы humanize'ить конкретную причину. */
+  /** Переопределяет {@link humanizeError} — например, чтобы назвать конкретную причину иначе. */
   formatMessage?: (error: Error) => string;
 }) {
   if (!error) return null;
   return (
     <p className="text-[10px] text-short" role="alert" data-testid={testid}>
-      {formatMessage ? formatMessage(error) : error.message}
+      {formatMessage ? formatMessage(error) : humanizeError(error)}
     </p>
   );
 }
