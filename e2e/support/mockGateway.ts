@@ -149,6 +149,31 @@ function orderListFor(world: MockWorld, status: string | null): GatewayOrder[] {
 }
 
 /**
+ * Связка, в которую шлюз сажает ногу (ADR-0071, `LinkedGroups.join`).
+ *
+ * @remarks Объявленный `groupId` принимается как есть. Reduce-only условная
+ * нога без него садится в активную связку аккаунта на рынке (хотя бы одна
+ * стоящая нога с `groupId`), а если такой нет — открывает новую со
+ * «серверным» id. Всё остальное вне связки. SDK с 0.62 `groupId` не шлёт, и
+ * мок, повторяющий старый клиентский контракт, проверял бы не то, что в проде.
+ */
+function linkedGroupFor(
+  world: MockWorld,
+  order: GatewayOrder,
+  payload: Record<string, unknown>,
+): string | null {
+  if (payload.groupId != null) return String(payload.groupId);
+  if (order.orderType === "LIMIT" || payload.reduceOnly !== true) return null;
+  const active = world.conditionalOrders.find(
+    (o) =>
+      o.accountId === order.accountId &&
+      o.marketId === order.marketId &&
+      o.groupId != null,
+  );
+  return active?.groupId ?? `group-${order.id}`;
+}
+
+/**
  * Mirror a real gateway: a resting LIMIT order lands in open orders; a trigger
  * order (STOP_* / TAKE_PROFIT_*) lands in conditional orders. MARKET orders
  * settle and don't rest.
@@ -172,11 +197,9 @@ function restSubmittedOrder(
     triggerPrice:
       payload.triggerPrice != null ? String(payload.triggerPrice) : null,
     createdAt: "2026-01-01T00:00:00.000Z",
-    // Связку шлюз возвращает в списках: без неё `positionBrackets` в e2e видит
-    // `undefined`, и замена ноги получает новую связку вместо унаследованной —
-    // то есть проверялось бы не то поведение, что в проде.
-    groupId: payload.groupId != null ? String(payload.groupId) : null,
+    groupId: null,
   };
+  order.groupId = linkedGroupFor(world, order, payload);
   if (orderType === "LIMIT") world.openOrders.push(order);
   else world.conditionalOrders.push(order);
 }

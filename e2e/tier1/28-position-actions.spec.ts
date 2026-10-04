@@ -134,7 +134,9 @@ test.describe("position actions", () => {
     expect(order.reduceOnly).toBe(true);
     // Замена встаёт в связку заменяемой: в новой связке сработавший стоп её
     // не снимет, и переставленный TP переживёт позицию.
-    expect(order.groupId).toBe("11111111-2222-4333-8444-555555555555");
+    // Связку назначает шлюз, а не клиент: смотрим на ордер, как он стоит.
+    const stored = world.conditionalOrders.find((o) => o.id !== "tp-1")!;
+    expect(stored.groupId).toBe("11111111-2222-4333-8444-555555555555");
   });
 
   test("editing one leg of a group-less pair re-submits both into one group", async ({
@@ -178,8 +180,17 @@ test.describe("position actions", () => {
     expect(tp.triggerPrice).toBe((95_000n * WAD).toString());
     // Цену стопа пользователь не менял — меняется только связка.
     expect(sl.triggerPrice).toBe((60_000n * WAD).toString());
-    expect(tp.groupId).toBeTruthy();
-    expect(sl.groupId).toBe(tp.groupId);
+    const storedTp = world.conditionalOrders.find(
+      (o) =>
+        o.orderType === "TAKE_PROFIT_MARKET" &&
+        o.triggerPrice === tp.triggerPrice,
+    )!;
+    const storedSl = world.conditionalOrders.find(
+      (o) =>
+        o.orderType === "STOP_MARKET" && o.triggerPrice === sl.triggerPrice,
+    )!;
+    expect(storedTp.groupId).toBeTruthy();
+    expect(storedSl.groupId).toBe(storedTp.groupId);
     // Обе старые заявки снимаются, и только после подач.
     await expect
       .poll(() => [...world.cancelledOrderIds].sort())
