@@ -1,4 +1,4 @@
-import { describeOrderOutcome, type GatewayOrder } from "@liq/core";
+import type { GatewayOrder } from "@liq/core";
 import {
   useAccountId,
   useAccountOrderUpdates,
@@ -8,7 +8,8 @@ import {
 import { useEffect, useRef } from "react";
 
 import { useToastStore } from "../../stores/useToastStore";
-import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
+import { useSelectedMarket } from "../market/useSelectedMarket";
+import { outcomeToast } from "./outcomeToast";
 
 /**
  * Исход ордера — тостом: провал, отмена, которую назвал сервер, истечение,
@@ -35,7 +36,9 @@ export function useOrderOutcomeToasts(): void {
   const marketsRef = useRef(markets);
 
   useEffect(() => {
-    for (const order of [...(open ?? []), ...(conditional ?? [])]) {
+    // Открытый список свежее условного: его запись идёт последней и побеждает
+    // (как в `mergeById`).
+    for (const order of [...(conditional ?? []), ...(open ?? [])]) {
       known.current.set(order.id, order);
     }
   }, [open, conditional]);
@@ -45,19 +48,12 @@ export function useOrderOutcomeToasts(): void {
   }, [markets]);
 
   useAccountOrderUpdates((update) => {
-    const key = `${update.orderId}:${update.status}`;
-    if (shown.current.has(key)) return;
-    const order = known.current.get(update.orderId);
-    const outcome = describeOrderOutcome(update, order);
-    if (outcome === null) return;
-    shown.current.add(key);
-    push({
-      id: key,
-      ...outcome,
-      meta:
-        order === undefined
-          ? undefined
-          : `${order.side} · ${marketSymbol(marketsRef.current, order.marketId)}`,
-    });
+    const toast = outcomeToast(
+      update,
+      known.current,
+      shown.current,
+      marketsRef.current,
+    );
+    if (toast !== null) push(toast);
   });
 }

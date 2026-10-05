@@ -191,4 +191,41 @@ test.describe("order outcome toasts", () => {
     await expect(userInfo.orderRow("ord-dup-1")).toContainText("TRIGGERED");
     await expect(page.getByTestId("cancel-order-ord-dup-1")).toBeDisabled();
   });
+
+  test("a sticky toast does not outlive the session that raised it", async ({
+    page,
+    world,
+  }) => {
+    // SessionGate размонтирует тосты при смене сети; ошибка прежнего кошелька
+    // не должна всплыть под следующим.
+    const { app } = await enterTerminal(page, world, () => readyWorld());
+    const toasts = new ToastsPanel(page);
+    await expect
+      .poll(() => world.sseConnections.flat())
+      .toContain(ACCOUNT_CHANNEL);
+    world.sseFrames = [
+      sseOrderUpdateFrame("ord-x", "FAILED", { channel: ACCOUNT_CHANNEL }),
+    ];
+    await expect(toasts.outcome).toHaveCount(1, { timeout: 15_000 });
+
+    const switchTo = (chainId: string) =>
+      page.evaluate(
+        (id) =>
+          (
+            window as unknown as {
+              ethereum: { request: (a: unknown) => Promise<unknown> };
+            }
+          ).ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: id }],
+          }),
+        chainId,
+      );
+    await switchTo("0x1");
+    await expect(app.wrongChainGate).toBeVisible();
+    await switchTo("0x" + (6343).toString(16));
+    await expect(app.wrongChainGate).toBeHidden();
+    await expect(toasts.viewport).toBeAttached();
+    await expect(toasts.outcome).toHaveCount(0);
+  });
 });

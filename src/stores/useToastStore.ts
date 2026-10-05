@@ -38,3 +38,8 @@ export const useToastStore = create<ToastState>()((set) => ({
   dismiss: (id) =>
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
+
+/** Сбросить очередь: конец сессии, тосты прежнего кошелька чужому не нужны. */
+export function clearToasts(): void {
+  useToastStore.setState({ toasts: [] });
+}
