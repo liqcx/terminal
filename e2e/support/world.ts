@@ -760,12 +760,25 @@ export function ledgerRowFixture(
   };
 }
 
-/** A raw SSE frame (`data: {...}\n\n`) carrying an order_update event. */
-export function sseOrderUpdateFrame(orderId: string, status: string): string {
+/**
+ * Кадр SSE `order_update`. По умолчанию — канал ордера `order:{id}`; поток
+ * счёта — `channel: "orders:1"` (его слушают тосты исходов). `reason` и
+ * `origin` — как на проводе (`OrderUpdateData` из @liq/core).
+ */
+export function sseOrderUpdateFrame(
+  orderId: string,
+  status: string,
+  opts: { reason?: string; origin?: "pool_execution"; channel?: string } = {},
+): string {
   const event = {
     type: "order_update",
-    channel: `order:${orderId}`,
-    data: { orderId, status },
+    channel: opts.channel ?? `order:${orderId}`,
+    data: {
+      orderId,
+      status,
+      ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+      ...(opts.origin !== undefined ? { origin: opts.origin } : {}),
+    },
   };
   return `data: ${JSON.stringify(event)}\n\n`;
 }

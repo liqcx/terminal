@@ -19,10 +19,11 @@ export interface OrderRow {
    * Можно ли ещё отменить.
    *
    * @remarks Ордер в полёте (`MATCHED`, `SETTLEMENT_SUBMITTED`,
-   * `FAILED_RETRYABLE`) вышел из книги, но исхода ещё не получил: отменять
-   * нечего, отмена вернула бы отказ шлюза. До SDK 0.46.0 такой ордер не
-   * попадал ни в открытый список, ни в историю и просто исчезал с экрана
-   * между матчингом и сеттлментом; теперь он виден — с выключенной отменой.
+   * `FAILED_RETRYABLE`, а с SDK 0.64.0 и сработавший условный — `TRIGGERED`)
+   * вышел из книги, но исхода ещё не получил: отменять нечего, отмена вернула
+   * бы отказ шлюза. До SDK 0.46.0 такой ордер не попадал ни в открытый список,
+   * ни в историю и просто исчезал с экрана между матчингом и сеттлментом;
+   * теперь он виден — с выключенной отменой.
    */
   cancellable: boolean;
 }
@@ -42,7 +43,7 @@ export function useOpenOrderRows(): {
 
   const rows = useMemo<OrderRow[]>(
     () =>
-      [...open, ...conditional].map((order) => ({
+      mergeById(open, conditional).map((order) => ({
         order,
         symbol: marketSymbol(markets, order.marketId),
         cancel: (id: string) => cancel.mutate(id),
@@ -53,6 +54,22 @@ export function useOpenOrderRows(): {
   );
 
   return { rows, isLoading };
+}
+
+/**
+ * Открытые и условные ордера без дублей по id.
+ *
+ * @remarks Сработавший TP/SL недолго числится в обоих списках: открытый
+ * (опрос 10 с, с SDK 0.64.0 несёт `TRIGGERED`) обновился, условный (опрос 60 с)
+ * ещё держит `TRIGGER_PENDING`. Побеждает запись открытого списка — у неё
+ * свежее состояние, иначе рядом с `TRIGGERED` жила бы строка с живой отменой.
+ */
+function mergeById(
+  open: GatewayOrder[],
+  conditional: GatewayOrder[],
+): GatewayOrder[] {
+  const seen = new Set(open.map((o) => o.id));
+  return [...open, ...conditional.filter((o) => !seen.has(o.id))];
 }
 
 const EMPTY: GatewayOrder[] = [];

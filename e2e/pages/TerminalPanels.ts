@@ -479,3 +479,14 @@ export class ChartFramePage {
     return this.page.getByTestId(`chart-scale-${name}`);
   }
 }
+
+/** Тосты исходов ордеров — глобальный угол экрана, не панель терминала. */
+export class ToastsPanel {
+  readonly viewport: Locator;
+  readonly outcome: Locator;
+
+  constructor(page: Page) {
+    this.viewport = page.getByTestId("toast-viewport");
+    this.outcome = page.getByTestId("order-outcome-toast");
+  }
+}
