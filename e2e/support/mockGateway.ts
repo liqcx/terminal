@@ -150,7 +150,9 @@ function orderListFor(world: MockWorld, status: string | null): GatewayOrder[] {
   if (wanted.has("TRIGGER_PENDING")) return world.conditionalOrders;
   if ([...wanted].some((s) => TERMINAL_STATUSES.has(s)))
     return world.orderHistory;
-  return world.openOrders;
+  // Открытый запрос отдаёт только спрошенные статусы: тест TRIGGERED тем самым
+  // закрепляет, что SDK спрашивает и `TRIGGERED`.
+  return world.openOrders.filter((o) => wanted.has(o.status));
 }
 
 /**
@@ -161,6 +163,10 @@ function orderListFor(world: MockWorld, status: string | null): GatewayOrder[] {
  * стоящая нога с `groupId`), а если такой нет — открывает новую со
  * «серверным» id. Всё остальное вне связки. SDK с 0.62 `groupId` не шлёт, и
  * мок, повторяющий старый клиентский контракт, проверял бы не то, что в проде.
+ *
+ * Моделируется только решение 3 ADR-0071 (`LinkedGroups.join`): без
+ * `GROUP_MISMATCH` и `CONFLICT`; берётся первая активная связка, а шлюз берёт
+ * самую новую.
  */
 function linkedGroupFor(
   world: MockWorld,
@@ -424,7 +430,11 @@ export async function mockGateway(page: Page, world: MockWorld): Promise<void> {
         signature: string;
       };
       world.authVerifyRequests.push(payload);
-      await send(route, { token: gatewayToken(TEST_ADDRESS), address: TEST_ADDRESS });
+      // Токен — на кошелёк из SIWE-сообщения (второй кошелёк `__e2eSwitchAccount`
+      // входит под своим адресом); нет адреса в сообщении — тестовый.
+      const signer =
+        payload.message.match(/0x[0-9a-fA-F]{40}/)?.[0] ?? TEST_ADDRESS;
+      await send(route, { token: gatewayToken(signer), address: signer });
       return;
     }
 

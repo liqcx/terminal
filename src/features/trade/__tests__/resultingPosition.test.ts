@@ -46,7 +46,7 @@ describe("resultingPosition", () => {
   });
 
   it("полное закрытие даёт нулевой размер", () => {
-    // Ног у такой позиции нет; вердикт по ней пуст — это решает SDK.
+    // Ног у такой позиции нет; план по ней пуст — это решает SDK.
     const open = { size: WAD };
     expect(resultingPosition(MARKET, open, Qty(-WAD)).size).toBe(Qty(0n));
   });

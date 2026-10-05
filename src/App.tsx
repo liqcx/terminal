@@ -1,3 +1,5 @@
+import { useAccount } from "wagmi";
+
 import { ToastProvider, ToastViewport } from "@/components/ui/toast";
 import { AccountPage } from "./features/account/AccountPage";
 import { SessionGate } from "./features/auth/SessionGate";
@@ -18,6 +20,9 @@ import { accountHref, TRADE_HREF, useHashRoute } from "./lib/hashRoute";
 export default function App() {
   const route = useHashRoute();
   const onAccount = route.view === "account";
+  // Кошелёк — ключ тостов: A→B→A быстрее сборки кеша счёта обходится без
+  // размонтирования гейта, и тост B показался бы под A.
+  const { address } = useAccount();
   return (
     <MarketProvider>
       <ToastProvider swipeDirection="right">
@@ -58,7 +63,7 @@ export default function App() {
           <main className="flex min-h-0 flex-1 flex-col p-2">
             <SessionGate>
               {/* Вне переключателя страниц: исход ордера виден и на странице счёта. */}
-              <OrderOutcomeToasts />
+              <OrderOutcomeToasts key={address ?? ""} />
               {/* Терминал размонтируется на странице счёта: кеш react-query
                   переживает, SSE переподписывается при возврате. */}
               {route.view === "account" ? (

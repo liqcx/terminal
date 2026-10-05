@@ -37,4 +37,20 @@ describe("useToastStore", () => {
       "6",
     ]);
   });
+
+  it("залипшая ошибка переживает пять более новых тостов", () => {
+    useToastStore.getState().push(toast("err"));
+    for (const id of ["1", "2", "3", "4", "5"]) {
+      useToastStore
+        .getState()
+        .push({ id, tone: "info" as const, title: `i-${id}` });
+    }
+    expect(useToastStore.getState().toasts.map((t) => t.id)).toEqual([
+      "err",
+      "2",
+      "3",
+      "4",
+      "5",
+    ]);
+  });
 });

@@ -17,8 +17,31 @@ interface ToastState {
   dismiss: (id: string) => void;
 }
 
-/** Больше пяти тостов разом — уже не подсказка, а стена; старые уходят первыми. */
+/**
+ * Больше пяти тостов разом — уже не подсказка, а стена; уходят старые, но
+ * не ошибки: залипший провал стоп-лосса переживает пять более новых тостов.
+ */
 const MAX_TOASTS = 5;
+
+/** Оставляет `MAX_TOASTS`: сначала выселяются самые старые не-ошибки, потом старые ошибки. */
+function trim(toasts: AppToast[]): AppToast[] {
+  let excess = toasts.length - MAX_TOASTS;
+  if (excess <= 0) return toasts;
+  const drop = new Set<AppToast>();
+  for (const t of toasts) {
+    if (excess > 0 && t.tone !== "error") {
+      drop.add(t);
+      excess--;
+    }
+  }
+  for (const t of toasts) {
+    if (excess > 0 && !drop.has(t)) {
+      drop.add(t);
+      excess--;
+    }
+  }
+  return toasts.filter((t) => !drop.has(t));
+}
 
 /**
  * Очередь тостов.
@@ -33,7 +56,7 @@ export const useToastStore = create<ToastState>()((set) => ({
     set((s) =>
       s.toasts.some((t) => t.id === toast.id)
         ? s
-        : { toasts: [...s.toasts, toast].slice(-MAX_TOASTS) },
+        : { toasts: trim([...s.toasts, toast]) },
     ),
   dismiss: (id) =>
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

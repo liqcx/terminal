@@ -1,16 +1,34 @@
 import { enterTerminal } from "../pages/flows";
 import { ToastsPanel } from "../pages/TerminalPanels";
-import { MARKET } from "../support/constants";
+import { MARKET, TEST_ADDRESS } from "../support/constants";
+import { OTHER_WALLET_ADDRESS } from "../support/injectedWallet";
 import { expect, test } from "../support/fixtures";
 import {
   conditionalOrderFixture,
   limitOrderFixture,
   readyWorld,
   sseOrderUpdateFrame,
+  type MockWorld,
 } from "../support/world";
 
 /** Поток счёта `orders:{accountId}`; счёт мока — "1". */
 const ACCOUNT_CHANNEL = "orders:1";
+
+/**
+ * Ждёт, пока НОВЕЙШЕЕ соединение SSE несёт все ожидаемые каналы.
+ *
+ * @remarks Подписка на `orders:1` приходит раньше `order:{id}` открытых
+ * ордеров: `useLiveOrders` добавляет их, когда список приехал, и клиент
+ * переподключается. Кадр, поданный в щель, достался бы прерванному соединению.
+ */
+async function newestConnectionHas(
+  world: MockWorld,
+  ...extra: string[]
+): Promise<void> {
+  await expect
+    .poll(() => world.sseConnections.at(-1) ?? [])
+    .toEqual(expect.arrayContaining([ACCOUNT_CHANNEL, ...extra]));
+}
 
 test.describe("order outcome toasts", () => {
   test("the terminal listens to the account order stream", async ({
@@ -18,9 +36,7 @@ test.describe("order outcome toasts", () => {
     world,
   }) => {
     await enterTerminal(page, world, () => readyWorld());
-    await expect
-      .poll(() => world.sseConnections.flat())
-      .toContain(ACCOUNT_CHANNEL);
+    await newestConnectionHas(world);
   });
 
   test("a failed stop loss shows an error toast and leaves Open Orders", async ({
@@ -34,6 +50,7 @@ test.describe("order outcome toasts", () => {
     const toasts = new ToastsPanel(page);
     await userInfo.selectTab("open-orders");
     await expect(userInfo.orderRow("ord-cond-1")).toBeVisible();
+    await newestConnectionHas(world);
 
     world.sseFrames = [
       sseOrderUpdateFrame("ord-cond-1", "FAILED", {
@@ -57,9 +74,7 @@ test.describe("order outcome toasts", () => {
       readyWorld({ conditionalOrders: [conditionalOrderFixture()] }),
     );
     const toasts = new ToastsPanel(page);
-    await expect
-      .poll(() => world.sseConnections.flat())
-      .toContain(ACCOUNT_CHANNEL);
+    await newestConnectionHas(world);
 
     world.sseFrames = [
       sseOrderUpdateFrame("ord-cond-1", "FAILED", {
@@ -87,9 +102,7 @@ test.describe("order outcome toasts", () => {
       }),
     );
     const toasts = new ToastsPanel(page);
-    await expect
-      .poll(() => world.sseConnections.flat())
-      .toContain(ACCOUNT_CHANNEL);
+    await newestConnectionHas(world, "order:ord-limit-1");
 
     // Голый CANCELLED — так приходят Cancel, Save в TP/SL и Close. Оба кадра
     // уходят одним ответом: после каждого ответа SDK переподключается с
@@ -118,9 +131,7 @@ test.describe("order outcome toasts", () => {
   }) => {
     await enterTerminal(page, world, () => readyWorld());
     const toasts = new ToastsPanel(page);
-    await expect
-      .poll(() => world.sseConnections.flat())
-      .toContain(ACCOUNT_CHANNEL);
+    await newestConnectionHas(world);
 
     world.sseFrames = [
       sseOrderUpdateFrame("ord-unknown", "FAILED", {
@@ -138,9 +149,7 @@ test.describe("order outcome toasts", () => {
   test("an error toast stays until dismissed", async ({ page, world }) => {
     await enterTerminal(page, world, () => readyWorld());
     const toasts = new ToastsPanel(page);
-    await expect
-      .poll(() => world.sseConnections.flat())
-      .toContain(ACCOUNT_CHANNEL);
+    await newestConnectionHas(world);
     world.sseFrames = [
       sseOrderUpdateFrame("ord-x", "FAILED", { channel: ACCOUNT_CHANNEL }),
     ];
@@ -200,9 +209,7 @@ test.describe("order outcome toasts", () => {
     // не должна всплыть под следующим.
     const { app } = await enterTerminal(page, world, () => readyWorld());
     const toasts = new ToastsPanel(page);
-    await expect
-      .poll(() => world.sseConnections.flat())
-      .toContain(ACCOUNT_CHANNEL);
+    await newestConnectionHas(world);
     world.sseFrames = [
       sseOrderUpdateFrame("ord-x", "FAILED", { channel: ACCOUNT_CHANNEL }),
     ];
@@ -226,6 +233,44 @@ test.describe("order outcome toasts", () => {
     await switchTo("0x" + (6343).toString(16));
     await expect(app.wrongChainGate).toBeHidden();
     await expect(toasts.viewport).toBeAttached();
+    await expect(toasts.outcome).toHaveCount(0);
+  });
+
+  test("a sticky toast does not cross from one wallet to another and back", async ({
+    page,
+    world,
+  }) => {
+    // A→B→A быстрее сборки кеша счёта обходится без размонтирования гейта:
+    // тост, поднятый под одним кошельком, не должен дожить до другого.
+    const { app } = await enterTerminal(page, world, () => readyWorld());
+    const toasts = new ToastsPanel(page);
+    await newestConnectionHas(world);
+    const switchAccount = (address: string) =>
+      page.evaluate(
+        (a) =>
+          (
+            window as unknown as {
+              __e2eSwitchAccount: (x: string) => Promise<void>;
+            }
+          ).__e2eSwitchAccount(a),
+        address,
+      );
+
+    await switchAccount(OTHER_WALLET_ADDRESS);
+    await expect(app.walletAddressButton).not.toContainText(
+      TEST_ADDRESS.slice(0, 5),
+    );
+    // Под вторым кошельком токена ещё нет: ждём ступень входа, а не гадаем.
+    await expect(app.signinButton.or(app.tradeReady)).toBeVisible();
+    if (await app.signinButton.isVisible()) await app.signinButton.click();
+    await expect(app.tradeReady).toBeVisible();
+    await newestConnectionHas(world);
+    world.sseFrames = [
+      sseOrderUpdateFrame("ord-b", "FAILED", { channel: ACCOUNT_CHANNEL }),
+    ];
+    await expect(toasts.outcome).toHaveCount(1, { timeout: 15_000 });
+
+    await switchAccount(TEST_ADDRESS);
     await expect(toasts.outcome).toHaveCount(0);
   });
 });

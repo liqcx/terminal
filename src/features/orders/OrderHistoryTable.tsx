@@ -77,11 +77,11 @@ const columns = helper.columns([
  * Ордера, вышедшие из конвейера матчинга.
  *
  * @remarks Хук спрашивает `TERMINAL_ORDER_STATUSES`. Вместе с
- * `OPEN_ORDER_STATUSES`, которыми живёт вкладка Open Orders, это НЕ все статусы:
- * `MATCHED`, `SETTLEMENT_SUBMITTED` и `FAILED_RETRYABLE` не видны ни там, ни
- * здесь — ордер в этих состояниях исчезает с экрана и возвращается уже
- * исполненным. Закрывается расширением `useOpenOrdersQuery` в SDK; здесь
- * замалчивать это нечем.
+ * `OPEN_ORDER_STATUSES`, которыми живёт вкладка Open Orders, это не все
+ * статусы: ордера в полёте (`MATCHED`, `SETTLEMENT_SUBMITTED`,
+ * `FAILED_RETRYABLE`, с SDK 0.64.0 и `TRIGGERED`) живут во вкладке Open Orders
+ * с погашенной отменой (`isInFlight`), а не здесь; в историю они попадают,
+ * когда получат исход.
  */
 export function OrderHistoryTable() {
   const { markets } = useSelectedMarket();

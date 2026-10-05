@@ -7,9 +7,11 @@ import { useOrderOutcomeToasts } from "./useOrderOutcomeToasts";
 /** Тосты исходов ордеров: подписка на поток счёта и сами тосты. */
 export function OrderOutcomeToasts() {
   useOrderOutcomeToasts();
-  // SessionGate размонтирует нас при смене сессии (отключение, не та сеть):
-  // тосты прежнего кошелька не должны всплыть под следующим. На переходах
-  // Trade/Account мы не размонтируемся — залипшая ошибка переживает страницу.
+  // Очередь живёт, пока смонтирован этот компонент: SessionGate снимает его при
+  // отключении, не той сети и загрузке счёта, а `key` по кошельку в App —
+  // при смене кошелька (в том числе A→B→A без загрузки: кеш счёта жив).
+  // На переходах Trade/Account компонент остаётся — залипшая ошибка
+  // переживает страницу.
   useEffect(() => clearToasts, []);
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
