@@ -5,7 +5,7 @@ import {
   Price,
 } from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
-import { humanizeError, wadToFixed } from "@liq/core";
+import { formatQty, humanizeError, wadToFixed } from "@liq/core";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,11 @@ export function TpSlDialog({
     .filter((t) => t !== undefined)
     .join(" · ");
   const warning = describeBracketWarning(plan.warn);
+  // Скобки исполняются не больше позиции: после частичного закрытия
+  // подписанный размер больше — показываем, сколько закроется (TRM-21).
+  const cappedLeg = [row.brackets.takeProfit, row.brackets.stopLoss].find(
+    (b) => b !== null && b.effectiveSize < b.size,
+  );
 
   // `mutate` (не `mutateAsync`): отказ показывается из `applyBrackets.error`
   // ниже, а диалог остаётся открытым — закрывать его поверх ошибки значило бы
@@ -136,6 +141,16 @@ export function TpSlDialog({
         <p className="mt-2 text-[11px] text-muted">
           Empty field removes the bracket. Orders are reduce-only.
         </p>
+
+        {cappedLeg && (
+          <p
+            data-testid="tpsl-size-capped"
+            className="mt-2 text-[11px] text-muted"
+          >
+            Closes {formatQty(cappedLeg.effectiveSize)} — capped to position size
+            (signed for {formatQty(cappedLeg.size)}).
+          </p>
+        )}
 
         {rejection !== "" && (
           <p

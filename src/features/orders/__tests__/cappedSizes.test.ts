@@ -1,4 +1,4 @@
-import { type GatewayOrder, Qty } from "@liq/sdk";
+import { type GatewayOrder, OrderType, Qty, Side } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
 import { cappedSizes } from "../cappedSizes";
@@ -25,7 +25,7 @@ const sl = (over: Partial<GatewayOrder> = {}): GatewayOrder =>
 const tp = (over: Partial<GatewayOrder> = {}): GatewayOrder =>
   sl({
     id: "tp-1",
-    orderType: "TAKE_PROFIT_MARKET",
+    orderType: OrderType.TAKE_PROFIT_MARKET,
     triggerPrice: (90_000n * WAD).toString(),
     // Подписан на 3 — отличается от размера стопа, чтобы значения не путались.
     sizeDelta: (-3n * WAD).toString(),
@@ -60,7 +60,7 @@ describe("cappedSizes", () => {
   it("позиция короткая: нога той же стороны, что позиция, — не скобка", () => {
     const m = cappedSizes(
       [{ marketId: 200n, size: Qty(-WAD / 2n) }],
-      [sl({ side: "BUY", sizeDelta: WAD.toString() })],
+      [sl({ side: Side.BUY, sizeDelta: WAD.toString() })],
     );
     expect(m.get("sl-1")).toBe(WAD / 2n);
   });

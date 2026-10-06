@@ -42,14 +42,33 @@ const columns = helper.columns([
       </span>
     ),
   }),
-  helper.accessor((r) => Number(parseWadLoose(r.order.sizeDelta)), {
-    id: "size",
-    header: "Size",
-    cell: (info) => {
-      const size = parseWadLoose(info.row.original.order.sizeDelta);
-      return formatQty(size < 0n ? -size : size);
+  // Сортировка идёт по тому, что исполнится: урезанная скобка стоит по
+  // действующему размеру, а не по подписанному (TRM-21).
+  helper.accessor(
+    (r) => {
+      const signed = parseWadLoose(r.order.sizeDelta);
+      return Number(r.cappedSize ?? (signed < 0n ? -signed : signed));
     },
-  }),
+    {
+      id: "size",
+      header: "Size",
+      cell: (info) => {
+        const { order, cappedSize } = info.row.original;
+        const size = parseWadLoose(order.sizeDelta);
+        const signed = size < 0n ? -size : size;
+        if (cappedSize === undefined) return formatQty(signed);
+        return (
+          <span
+            data-testid="order-size-capped"
+            title={`Signed for ${formatQty(signed)}; capped to position size`}
+          >
+            {formatQty(cappedSize)}{" "}
+            <span className="text-muted text-xs">capped to position size</span>
+          </span>
+        );
+      },
+    },
+  ),
   helper.accessor((r) => Number(parseWadLoose(r.order.limitPrice ?? "0")), {
     id: "price",
     header: "Price",
