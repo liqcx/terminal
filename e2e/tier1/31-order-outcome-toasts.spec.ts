@@ -83,9 +83,9 @@ test.describe("order outcome toasts", () => {
     await expect(userInfo.orderRow("ord-cond-1")).toBeVisible();
     await newestConnectionHas(world);
 
-    // Расчёт снял скобку и на шлюзе: поток лишь помечает список устаревшим
-    // (`orderStateChanged`), а строка уходит с перечитанным ответом шлюза.
-    world.conditionalOrders = [];
+    // Мок шлюза снимает скобку с доставкой кадра (`applySseEffects`), а поток
+    // лишь помечает список устаревшим (`orderStateChanged`): строка уходит с
+    // перечитанным ответом, не с кадром.
     world.sseFrames = [
       sseOrderUpdateFrame("ord-cond-1", "CANCELLED", {
         reason: "position_closed",
