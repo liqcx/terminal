@@ -65,8 +65,6 @@ const EMPTY_ORDERS: NonNullable<
 const EMPTY_POSITIONS: NonNullable<
   ReturnType<typeof useEnrichedPositions>["data"]
 > = [];
-/** Скобок нет — пока рынок не выбран. Стабильная ссылка: литерал гонял бы мемо. */
-const NO_BRACKETS = { takeProfit: null, stopLoss: null };
 
 export function TradeForm() {
   const { marketId, market, allMarketIds } = useSelectedMarket();
@@ -154,10 +152,9 @@ export function TradeForm() {
 
   const tpPrice = Price(parseOrZero(Price.parse, tp));
   const slPrice = Price(parseOrZero(Price.parse, sl));
-  const brackets =
-    marketId === undefined
-      ? NO_BRACKETS
-      : positionBrackets(openPosition, conditional);
+  // Нет позиции — нет скобок, и план входа ставит новые ноги (SDK 0.65.0
+  // отдаёт пустые скобки для `undefined`).
+  const brackets = positionBrackets(openPosition, conditional);
   // Скобки судятся, только когда их собираются поставить: погашенный тумблер и
   // два пустых поля — это «скобок нет», а не «скобки плохие».
   const bracketsOn = tpslOn && (tpPrice > 0n || slPrice > 0n);

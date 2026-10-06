@@ -229,6 +229,51 @@ test.describe("position actions", () => {
     expect(world.cancelledOrderIds).toEqual([]);
   });
 
+  test("a reduce-only leg of the other side is no bracket: not in the row, not cancelled by Save, cancellable in Open Orders (TRM-9)", async ({
+    page,
+    world,
+  }) => {
+    // Сирота закрытой короткой: BUY reduce-only на рынке, где теперь длинная.
+    // Раньше хватало рынка, и она читалась как стоп новой позиции.
+    const orphanTrigger = (123_456n * WAD).toString();
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.conditionalOrders = [
+        conditionalOrderFixture({
+          id: "orphan-1",
+          side: "BUY",
+          sizeDelta: WAD.toString(),
+          triggerPrice: orphanTrigger,
+        }),
+      ];
+      return w;
+    });
+
+    // Колонка TP / SL позиции её цены не показывает.
+    await userInfo.selectTab("positions");
+    await expect(userInfo.positionRow(MARKET.id)).toBeVisible();
+    await expect(userInfo.positionRow(MARKET.id)).not.toContainText("123,456");
+
+    // Редактор открывается пустым, и Save ставит тейк, не трогая сироту.
+    await userInfo.editTpSl(MARKET.id).click();
+    await expect(userInfo.tpslDialog).toBeVisible();
+    await expect(userInfo.tpslTp).toHaveValue("");
+    await expect(userInfo.tpslSl).toHaveValue("");
+    await userInfo.tpslTp.fill("95000");
+    await userInfo.tpslSave.click();
+    await expect(userInfo.tpslDialog).toBeHidden();
+    expect(world.submittedOrders).toHaveLength(1);
+    expect(world.cancelledOrderIds).toEqual([]);
+
+    // Сирота при этом видна в Open Orders, у неё своя кнопка Cancel.
+    await userInfo.selectTab("open-orders");
+    await expect(userInfo.orderRow("orphan-1")).toBeVisible();
+    await expect(userInfo.orderRow("orphan-1")).toContainText("123,456");
+    await userInfo.cancelOrder("orphan-1");
+    await expect.poll(() => world.cancelledOrderIds).toEqual(["orphan-1"]);
+  });
+
   test("clearing the SL field only cancels", async ({ page, world }) => {
     const { userInfo } = await enterTerminal(page, world, () => {
       const w = readyWorld();
