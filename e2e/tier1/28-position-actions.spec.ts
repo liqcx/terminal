@@ -63,7 +63,7 @@ test.describe("position actions", () => {
     expect(eth?.side).toBe("BUY");
   });
 
-  test("closing cancels the position's brackets and leaves resting limits alone", async ({
+  test("closing submits only the close order — brackets are the backend's to cancel", async ({
     page,
     world,
   }) => {
@@ -87,11 +87,9 @@ test.describe("position actions", () => {
     await userInfo.closeConfirm.click();
 
     await expect.poll(() => world.submittedOrders.length).toBe(1);
-    // Осиротевший reduce-only триггер исполниться не может, но в списке
-    // условных читается как живой — поэтому снимается вместе с позицией.
-    expect(new Set(world.cancelledOrderIds)).toEqual(new Set(["sl-1", "tp-1"]));
-    // А отдыхающая лимитка не трогается: кнопка про неё не говорила.
-    expect(world.cancelledOrderIds).not.toContain("rest-1");
+    // Скобки снимает расчёт, закрывший позицию (Ф2): отмена до подачи
+    // оставляла позицию без защиты, если закрытие не исполнялось.
+    expect(world.cancelledOrderIds).toEqual([]);
   });
 
   test("editing TP cancels the old trigger and submits a new one", async ({

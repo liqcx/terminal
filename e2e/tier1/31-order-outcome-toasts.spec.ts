@@ -69,6 +69,32 @@ test.describe("order outcome toasts", () => {
     });
   });
 
+  test("a bracket the backend cancels with its position names why", async ({
+    page,
+    world,
+  }) => {
+    // TRM-8: скобки закрытой позиции снимает расчёт; трейдер узнаёт об этом
+    // тостом, а не из Order History.
+    const { userInfo } = await enterTerminal(page, world, () =>
+      readyWorld({ conditionalOrders: [conditionalOrderFixture()] }),
+    );
+    const toasts = new ToastsPanel(page);
+    await userInfo.selectTab("open-orders");
+    await expect(userInfo.orderRow("ord-cond-1")).toBeVisible();
+    await newestConnectionHas(world);
+
+    world.sseFrames = [
+      sseOrderUpdateFrame("ord-cond-1", "CANCELLED", {
+        reason: "position_closed",
+        channel: ACCOUNT_CHANNEL,
+      }),
+    ];
+
+    await expect(toasts.outcome).toHaveCount(1, { timeout: 15_000 });
+    await expect(toasts.outcome).toContainText("Stop loss cancelled");
+    await expect(toasts.outcome).toContainText("The position was closed.");
+  });
+
   test("the same outcome twice is one toast", async ({ page, world }) => {
     await enterTerminal(page, world, () =>
       readyWorld({ conditionalOrders: [conditionalOrderFixture()] }),
@@ -104,7 +130,8 @@ test.describe("order outcome toasts", () => {
     const toasts = new ToastsPanel(page);
     await newestConnectionHas(world, "order:ord-limit-1");
 
-    // Голый CANCELLED — так приходят Cancel, Save в TP/SL и Close. Оба кадра
+    // Голый CANCELLED — так приходят Cancel и Save в TP/SL (Close скобки не
+    // снимает, это делает расчёт, и тот называет причину). Оба кадра
     // уходят одним ответом: после каждого ответа SDK переподключается с
     // нарастающей паузой, и второй кадр ждал бы её.
     world.sseFrames = [
