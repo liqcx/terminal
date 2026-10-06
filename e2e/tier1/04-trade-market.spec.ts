@@ -157,9 +157,15 @@ test.describe("market orders", () => {
       expect(tp.reduceOnly).toBe(true);
       expect(sl.reduceOnly).toBe(true);
       // Одна связка на обе ноги: без неё сработавший TP не снимет стоп, и тот
-      // переживёт позицию.
-      expect(tp.groupId).toBeTruthy();
-      expect(sl.groupId).toBe(tp.groupId);
+      // переживёт позицию. Связку назначает шлюз (SDK `groupId` не шлёт), так
+      // что смотрим на ордера, как он их оставил.
+      const stored = world.conditionalOrders;
+      const storedTp = stored.find(
+        (o) => o.orderType === "TAKE_PROFIT_MARKET",
+      )!;
+      const storedSl = stored.find((o) => o.orderType === "STOP_MARKET")!;
+      expect(storedTp.groupId).toBeTruthy();
+      expect(storedSl.groupId).toBe(storedTp.groupId);
 
       // TP/SL prices are cleared after a confirmed submit (no stale re-attach).
       await expect(trade.entryTpInput).toHaveValue("");
@@ -277,7 +283,9 @@ test.describe("market orders", () => {
 
     await expect(trade.submitBuy).toBeDisabled();
     await expect(trade.submitSell).toBeEnabled();
-    await expect(trade.entryTpslValidation).toHaveText("TP/SL fit a short only");
+    await expect(trade.entryTpslValidation).toHaveText(
+      "TP/SL fit a short only",
+    );
   });
 
   test("switching TP/SL off drops the verdict, even with a bad price still in the fields", async ({

@@ -29,11 +29,20 @@ interface WalletState {
   connected: boolean;
 }
 
+/** Второй кошелёк для `__e2eSwitchAccount`: адрес, отличный от TEST_ADDRESS. */
+export const OTHER_WALLET_ADDRESS = "0x00000000000000000000000000000000000000b2";
+
 export async function installWallet(
   page: Page,
   world: MockWorld,
 ): Promise<WalletState> {
   const state: WalletState = { connected: false };
+  /** Адрес, который кошелёк отдаёт сейчас; `__e2eSwitchAccount` его меняет. */
+  let account = TEST_ADDRESS.toLowerCase();
+
+  await page.exposeFunction("__e2eSetAccount", (address: string) => {
+    account = address.toLowerCase();
+  });
 
   await page.exposeFunction(
     "__e2eWalletRequest",
@@ -48,9 +57,9 @@ export async function installWallet(
             throw new Error("User rejected the request");
           }
           state.connected = true;
-          return [TEST_ADDRESS.toLowerCase()];
+          return [account];
         case "eth_accounts":
-          return state.connected ? [TEST_ADDRESS.toLowerCase()] : [];
+          return state.connected ? [account] : [];
         case "personal_sign":
         case "eth_sign":
         case "eth_signTypedData":
@@ -165,6 +174,22 @@ export async function installWallet(
         },
       };
       (window as unknown as { ethereum: unknown }).ethereum = provider;
+
+      // Смена аккаунта в кошельке: меняет ответ eth_accounts и, как настоящий
+      // кошелёк, шлёт `accountsChanged`.
+      (
+        window as unknown as {
+          __e2eSwitchAccount: (address: string) => Promise<void>;
+        }
+      ).__e2eSwitchAccount = async (address: string) => {
+        await (
+          window as unknown as {
+            __e2eSetAccount: (a: string) => Promise<void>;
+          }
+        ).__e2eSetAccount(address);
+        for (const fn of listeners["accountsChanged"] ?? [])
+          fn([address.toLowerCase()]);
+      };
 
       // EIP-6963 announcement so wagmi's injected discovery finds it too.
       const info = {

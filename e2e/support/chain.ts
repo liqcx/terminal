@@ -126,7 +126,9 @@ function computeRead(
       // and the rest are 18-dec. A flat 18-dec value for USDC would let the
       // dialog's 6-dec→WAD lift overstate the balance by 10^12.
       return [
-        logical === "USDC" ? 1_000_000n * 10n ** 6n : 1_000_000n * 10n ** 18n,
+        logical === "USDC"
+          ? (world.walletUsdc ?? 1_000_000n * 10n ** 6n)
+          : 1_000_000n * 10n ** 18n,
       ];
     }
     case "tokenOfOwnerByIndex": {

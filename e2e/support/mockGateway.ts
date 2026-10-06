@@ -48,11 +48,16 @@ function send(route: Route, body: unknown, status = 200): Promise<void> {
   });
 }
 
-function error(route: Route, status: number, code = "internal"): Promise<void> {
+function error(
+  route: Route,
+  status: number,
+  code = "internal",
+  message = code,
+): Promise<void> {
   return route.fulfill({
     status,
     contentType: "application/json",
-    body: JSON.stringify({ error: { code, message: code } }),
+    body: JSON.stringify({ error: { code, message } }),
   });
 }
 
@@ -74,7 +79,7 @@ async function faulted(
 ): Promise<boolean> {
   const status = world.faults.routeStatus[key];
   if (status === undefined) return false;
-  await error(route, status, code);
+  await error(route, status, code, world.faults.routeMessage[key]);
   return true;
 }
 
@@ -145,7 +150,38 @@ function orderListFor(world: MockWorld, status: string | null): GatewayOrder[] {
   if (wanted.has("TRIGGER_PENDING")) return world.conditionalOrders;
   if ([...wanted].some((s) => TERMINAL_STATUSES.has(s)))
     return world.orderHistory;
-  return world.openOrders;
+  // Открытый запрос отдаёт только спрошенные статусы: тест TRIGGERED тем самым
+  // закрепляет, что SDK спрашивает и `TRIGGERED`.
+  return world.openOrders.filter((o) => wanted.has(o.status));
+}
+
+/**
+ * Связка, в которую шлюз сажает ногу (ADR-0071, `LinkedGroups.join`).
+ *
+ * @remarks Объявленный `groupId` принимается как есть. Reduce-only условная
+ * нога без него садится в активную связку аккаунта на рынке (хотя бы одна
+ * стоящая нога с `groupId`), а если такой нет — открывает новую со
+ * «серверным» id. Всё остальное вне связки. SDK с 0.62 `groupId` не шлёт, и
+ * мок, повторяющий старый клиентский контракт, проверял бы не то, что в проде.
+ *
+ * Моделируется только решение 3 ADR-0071 (`LinkedGroups.join`): без
+ * `GROUP_MISMATCH` и `CONFLICT`; берётся первая активная связка, а шлюз берёт
+ * самую новую.
+ */
+function linkedGroupFor(
+  world: MockWorld,
+  order: GatewayOrder,
+  payload: Record<string, unknown>,
+): string | null {
+  if (payload.groupId != null) return String(payload.groupId);
+  if (order.orderType === "LIMIT" || payload.reduceOnly !== true) return null;
+  const active = world.conditionalOrders.find(
+    (o) =>
+      o.accountId === order.accountId &&
+      o.marketId === order.marketId &&
+      o.groupId != null,
+  );
+  return active?.groupId ?? `group-${order.id}`;
 }
 
 /**
@@ -172,11 +208,9 @@ function restSubmittedOrder(
     triggerPrice:
       payload.triggerPrice != null ? String(payload.triggerPrice) : null,
     createdAt: "2026-01-01T00:00:00.000Z",
-    // Связку шлюз возвращает в списках: без неё `positionBrackets` в e2e видит
-    // `undefined`, и замена ноги получает новую связку вместо унаследованной —
-    // то есть проверялось бы не то поведение, что в проде.
-    groupId: payload.groupId != null ? String(payload.groupId) : null,
+    groupId: null,
   };
+  order.groupId = linkedGroupFor(world, order, payload);
   if (orderType === "LIMIT") world.openOrders.push(order);
   else world.conditionalOrders.push(order);
 }
@@ -396,7 +430,11 @@ export async function mockGateway(page: Page, world: MockWorld): Promise<void> {
         signature: string;
       };
       world.authVerifyRequests.push(payload);
-      await send(route, { token: gatewayToken(TEST_ADDRESS), address: TEST_ADDRESS });
+      // Токен — на кошелёк из SIWE-сообщения (второй кошелёк `__e2eSwitchAccount`
+      // входит под своим адресом); нет адреса в сообщении — тестовый.
+      const signer =
+        payload.message.match(/0x[0-9a-fA-F]{40}/)?.[0] ?? TEST_ADDRESS;
+      await send(route, { token: gatewayToken(signer), address: signer });
       return;
     }
 

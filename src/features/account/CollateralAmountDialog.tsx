@@ -1,5 +1,11 @@
 import { Margin } from "@liq/sdk";
-import { formatUsd, getChainConfig, getCollaterals, wadToFixed } from "@liq/core";
+import {
+  formatUsd,
+  getChainConfig,
+  getCollaterals,
+  humanizeError,
+  wadToFixed,
+} from "@liq/core";
 import { useNetworkId } from "@liq/react";
 import { type ReactNode, useState } from "react";
 
@@ -55,6 +61,7 @@ export function CollateralAmountDialog({
   limitLabel,
   exceededText,
   notice,
+  blockedReason,
   submitLabel,
   pendingLabel,
   pending,
@@ -77,6 +84,11 @@ export function CollateralAmountDialog({
   exceededText: string;
   /** Предупреждение над строкой потолка (долг аккаунта у вывода). */
   notice?: ReactNode;
+  /**
+   * Почему отправить нельзя, хотя сумма годна (у вывода — не хватает USDC
+   * кошелька на долг). Есть — кнопка гаснет, строка стоит под суммой.
+   */
+  blockedReason?: ReactNode;
   submitLabel: string;
   pendingLabel: string;
   pending: boolean;
@@ -91,7 +103,12 @@ export function CollateralAmountDialog({
   const [amount, setAmount] = useState("");
   const amountWad = parseOrZero(Margin.parse, amount);
   const exceedsLimit = limit !== undefined && amountWad > limit;
-  const blocked = disabled || pending || amountWad <= 0n || exceedsLimit;
+  const blocked =
+    disabled ||
+    pending ||
+    amountWad <= 0n ||
+    exceedsLimit ||
+    blockedReason != null;
 
   function submit() {
     if (blocked) return;
@@ -162,12 +179,15 @@ export function CollateralAmountDialog({
             {exceededText}
           </p>
         )}
+        {blockedReason != null && (
+          <p className="mt-2 text-[11px] text-short">{blockedReason}</p>
+        )}
         {error && (
           <p
             className="mt-2 text-[11px] text-short"
             data-testid={`${testIdPrefix}-error`}
           >
-            {error.message}
+            {humanizeError(error)}
           </p>
         )}
         <div className="mt-3 flex gap-2">

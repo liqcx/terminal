@@ -1,6 +1,7 @@
 import {
   acceptablePrice,
-  type BracketsVerdict,
+  type BracketsPlan,
+  bracketsPlanFor,
   Bps,
   describeBracketRejection,
   describeRejection,
@@ -9,7 +10,6 @@ import {
   Price,
   Qty,
   Side,
-  validateBrackets,
 } from "@liq/sdk";
 import {
   useAccountId,
@@ -21,7 +21,7 @@ import {
   useSessionStage,
   useTradeStore,
 } from "@liq/react";
-import { sanitizeDecimal } from "@liq/core";
+import { humanizeError, sanitizeDecimal } from "@liq/core";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -165,16 +165,16 @@ export function TradeForm() {
   /**
    * Годятся ли скобки позиции, которой станет рынок после входа этой стороной.
    *
-   * @remarks Сторон две, и вердикт у них разный: тейк ниже цены запрещён
+   * @remarks Сторон две, и план у них разный: тейк ниже цены запрещён
    * длинной и нормален короткой. Поэтому судится каждая кнопка отдельно, а не
    * «тикет целиком».
    *
    * Судит экран, а не только действие SDK: скобки входа подаются после того,
    * как шлюз принял вход, и отказ там оставил бы позицию без стопа.
    */
-  function verdictFor(side: Side): BracketsVerdict | null {
+  function planFor(side: Side): BracketsPlan | null {
     if (!bracketsOn || marketId === undefined) return null;
-    return validateBrackets({
+    return bracketsPlanFor({
       position: resultingPosition(
         marketId,
         openPosition,
@@ -190,17 +190,17 @@ export function TradeForm() {
     });
   }
 
-  const longVerdict = verdictFor(Side.BUY);
-  const shortVerdict = verdictFor(Side.SELL);
-  const longOk = longVerdict?.ok !== false;
-  const shortOk = shortVerdict?.ok !== false;
+  const longPlan = planFor(Side.BUY);
+  const shortPlan = planFor(Side.SELL);
+  // Ни одного отказа, включая `not-ready` (марка нет): так судил и прежний
+  // `verdict.ok` (SDK 0.57, до плана скобок), и кнопка без марка гаснет, а не подаёт вслепую.
+  const longOk = (longPlan?.rejected.length ?? 0) === 0;
+  const shortOk = (shortPlan?.rejected.length ?? 0) === 0;
 
   /** Отказы одной стороны одной строкой; пусто — сторона годна или судить нечем. */
-  function legsOf(label: string, verdict: BracketsVerdict | null): string {
-    const legs = [
-      describeBracketRejection(verdict?.takeProfit ?? null),
-      describeBracketRejection(verdict?.stopLoss ?? null),
-    ]
+  function rejectionsOf(label: string, plan: BracketsPlan | null): string {
+    const legs = (plan?.rejected ?? [])
+      .map((rejection) => describeBracketRejection(rejection))
       .filter((t) => t !== undefined)
       .join(" · ");
     return legs === "" ? "" : `${label} — ${legs}`;
@@ -225,7 +225,7 @@ export function TradeForm() {
         bad: false,
       };
     }
-    const text = [legsOf("Long", longVerdict), legsOf("Short", shortVerdict)]
+    const text = [rejectionsOf("Long", longPlan), rejectionsOf("Short", shortPlan)]
       .filter((t) => t !== "")
       .join(" · ");
     return text === "" ? null : { text, bad: true };
@@ -249,8 +249,7 @@ export function TradeForm() {
    * пользователь считал заменённой.
    *
    * Позиция здесь ещё дошлюзовая: вход принят, но не рассчитан, поэтому её
-   * размер с размером входа складывает `resultingPosition` — там же знак
-   * приводит `toSignedSize`, часть источников несёт размер по модулю.
+   * размер с размером входа складывает `resultingPosition`.
    *
    * Куда смотрит триггер, чем закрывается позиция и в какой связке стоят ноги,
    * решает действие SDK. Подаются они после того, как шлюз принял вход, то есть
@@ -478,7 +477,7 @@ export function TradeForm() {
         )}
         {error && (
           <p className="text-[10px] text-short" data-testid="trade-error">
-            {error.message}
+            {humanizeError(error)}
           </p>
         )}
       </div>

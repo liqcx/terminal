@@ -200,6 +200,11 @@ export interface MockWorld {
    * wallet_switchEthereumChain rewrites it and emits chainChanged. */
   chainId: number;
   accounts: AccountFixture[];
+  /**
+   * USDC в кошельке — сырой, 6 знаков. Нет — миллион: депозиту хватает на
+   * всё. Задаётся, чтобы проверить гейт погашения долга (TRM-29).
+   */
+  walletUsdc?: bigint;
   /** index price (onchain indexPrice + entry-price math), 18-dec */
   indexPrice: bigint;
   /** gateway mark price (GET /markets/:id/price), 18-dec */
@@ -283,6 +288,12 @@ export interface MockWorld {
      * `FaultRoute`.
      */
     routeStatus: Partial<Record<FaultRoute, number>>;
+    /**
+     * Текст отказа для маршрута из `routeStatus` — `error.message` в теле
+     * ответа шлюза. Нет — тело называет только код. Нужен, чтобы проверить,
+     * как терминал печатает настоящий отказ (TRM-42).
+     */
+    routeMessage: Partial<Record<FaultRoute, string>>;
     // chain: make modifyCollateral (deposit/withdraw) txs revert on-chain
     collateralReverts?: boolean;
     // wallet: reject the next wallet_switchEthereumChain / every eth_sendTransaction
@@ -538,7 +549,11 @@ export function freshWorld(opts: ScenarioOptions = {}): MockWorld {
     // `routeStatus` всегда есть: спека дописывает отказ после старта мира
     // (`world.faults.routeStatus.price = 500`), и опциональная запись потребовала
     // бы `?.` в каждой такой строке.
-    faults: { ...opts.faults, routeStatus: { ...opts.faults?.routeStatus } },
+    faults: {
+      ...opts.faults,
+      routeStatus: { ...opts.faults?.routeStatus },
+      routeMessage: { ...opts.faults?.routeMessage },
+    },
     submittedOrders: [],
     cancelledOrderIds: [],
     lastCollateralDelta: 0n,
@@ -745,12 +760,25 @@ export function ledgerRowFixture(
   };
 }
 
-/** A raw SSE frame (`data: {...}\n\n`) carrying an order_update event. */
-export function sseOrderUpdateFrame(orderId: string, status: string): string {
+/**
+ * Кадр SSE `order_update`. По умолчанию — канал ордера `order:{id}`; поток
+ * счёта — `channel: "orders:1"` (его слушают тосты исходов). `reason` и
+ * `origin` — как на проводе (`OrderUpdateData` из @liq/core).
+ */
+export function sseOrderUpdateFrame(
+  orderId: string,
+  status: string,
+  opts: { reason?: string; origin?: "pool_execution"; channel?: string } = {},
+): string {
   const event = {
     type: "order_update",
-    channel: `order:${orderId}`,
-    data: { orderId, status },
+    channel: opts.channel ?? `order:${orderId}`,
+    data: {
+      orderId,
+      status,
+      ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+      ...(opts.origin !== undefined ? { origin: opts.origin } : {}),
+    },
   };
   return `data: ${JSON.stringify(event)}\n\n`;
 }

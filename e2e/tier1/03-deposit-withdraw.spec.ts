@@ -378,4 +378,43 @@ test.describe("deposit & withdraw", () => {
     await withdraw.amountInput.fill("100");
     await expect(withdraw.submitButton).toHaveText("Repay & Withdraw");
   });
+
+  test("Repay & Withdraw is blocked when the wallet USDC cannot cover the debt", async ({
+    page,
+    world,
+  }) => {
+    // TRM-29: пустой кошелёк при долге — транзакция откатывалась без причины.
+    const { market, withdraw } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].debt = 168n * WAD;
+      w.walletUsdc = 100n * 10n ** 6n;
+      return w;
+    });
+
+    await market.openWithdraw();
+    await withdraw.amountInput.fill("1");
+    await expect(withdraw.walletShort).toBeVisible();
+    await expect(withdraw.walletShort).toHaveText(
+      "Not enough USDC in your wallet to repay the $168.00 debt (wallet: $100.00). Top up the wallet first.",
+    );
+    await expect(withdraw.submitButton).toBeDisabled();
+  });
+
+  test("Repay & Withdraw stays available when the wallet covers the debt", async ({
+    page,
+    world,
+  }) => {
+    const { market, withdraw } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].debt = 168n * WAD;
+      w.walletUsdc = 400n * 10n ** 6n;
+      return w;
+    });
+
+    await market.openWithdraw();
+    await withdraw.amountInput.fill("1");
+    await expect(withdraw.submitButton).toHaveText("Repay & Withdraw");
+    await expect(withdraw.submitButton).toBeEnabled();
+    await expect(withdraw.walletShort).toHaveCount(0);
+  });
 });
