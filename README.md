@@ -53,7 +53,7 @@ Every step maps to a hook from `@liq/react` (or a class from `@liq/sdk`):
 | Sign in (Turnkey)        | код на почту / подпись кошелька → встроенный кошелёк в TEE | `TurnkeyProviderWrapper`, `createEmbeddedWallet` | `features/auth/TurnkeyLoginButton.tsx`      |
 | Connect (wallet)         | wagmi wallet connect                              | wagmi `useConnect`                             | `features/wallet/ConnectButton.tsx`         |
 | Create account           | mint SNX account NFT                              | `useCreateAccountMutation`                     | `features/auth/SessionCta.tsx`              |
-| Sign in                  | SIWE personal_sign → JWT (+ book mode + register) | `useGatewayAuthMutation`                       | `features/auth/SessionCta.tsx`              |
+| Sign in                  | SIWE personal_sign → JWT (+ register account)     | `useGatewayAuthMutation`                       | `features/auth/SessionCta.tsx`              |
 | Deposit                  | USDC→sUSDC→modifyCollateral multicall             | `useDepositMutation`                           | `features/account/DepositDialog.tsx`        |
 | Markets / price          | list + live price                                 | `useMarketsQuery`, `usePricesQuery`            | `features/market/*`                         |
 | Chart                    | candles backfill + live 1m                        | `client.candles.history/subscribe`             | `features/chart/*`                          |

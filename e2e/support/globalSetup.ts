@@ -5,8 +5,8 @@
  * `@liq/*` SDK pull in ~300 prebundled deps — lazily, on the first page load.
  * Left to the suite, that one-time cost lands on the opening wave of parallel
  * tests and slows them ~3x while modules are (re)bundled and served. The
- * heaviest path (cold onboarding: create account → on-chain `setBookMode` →
- * SIWE → terminal) is normally ~6-8s but stretches to ~20s under that cold
+ * heaviest path (cold onboarding: create account → SIWE → terminal) is
+ * normally ~6-8s but stretches to ~20s under that cold
  * window, intermittently blowing its visibility gate. A lockfile change (e.g. a
  * dependency bump) forces a full re-optimize, making the squeeze reproducible.
  *

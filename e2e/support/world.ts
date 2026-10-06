@@ -581,7 +581,7 @@ export function freshWorld(opts: ScenarioOptions = {}): MockWorld {
   };
 }
 
-/** Account #1 in ONCHAIN mode, no margin — connected but must enable book + deposit. */
+/** Account #1 in ONCHAIN mode, no margin — connected, needs sign-in + deposit. */
 export function accountOnchainWorld(opts: ScenarioOptions = {}): MockWorld {
   return freshWorld({
     accounts: [
