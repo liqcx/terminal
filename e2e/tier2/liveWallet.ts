@@ -1,9 +1,9 @@
 /**
- * Live injected wallet for Tier 2. Mirrors the kwenta approach: a real viem
- * account (derived from the test mnemonic) signs SIWE messages + EIP-712 orders
- * and submits real transactions to the real RPC; all other RPC reads are
- * forwarded to a real public client. `isMetaMask:false` keeps wagmi's injected
- * connector from deferring to a (non-existent) MetaMask extension.
+ * Live injected wallet for Tier 2: a real viem account (derived from the test
+ * mnemonic) signs SIWE messages + EIP-712 orders and submits real transactions
+ * to the real RPC; all other RPC reads are forwarded to a real public client.
+ * `isMetaMask:false` keeps wagmi's injected connector from deferring to a
+ * (non-existent) MetaMask extension.
  */
 import type { Page } from "@playwright/test";
 import {

@@ -11,16 +11,9 @@ deposit → sign & submit orders → watch live updates**. Single-market, neutra
 ## Quickstart
 
 **Prereqs:** Node 24 + pnpm 11 (`proto use`), a browser wallet (MetaMask), and testnet funds
-(chainId 6343).
+(chainId 6343). The SDK (`@liqpro/*`) installs from public npm — no registry token needed.
 
-1. **Authenticate to the package registry.** The SDK packages are published to a GitHub Packages
-   registry (scope + URL are preconfigured in `.npmrc.example`), which needs a token even for read
-   access. Create a classic PAT with `read:packages`, then:
-   ```bash
-   cp .npmrc.example .npmrc
-   export GITHUB_TOKEN=ghp_your_read_packages_token
-   ```
-2. **Configure the backend.**
+1. **Configure the backend.**
    ```bash
    cp .env.example .env
    # set VITE_GATEWAY_URL to your order-gateway base URL, INCLUDING the API
@@ -34,7 +27,7 @@ deposit → sign & submit orders → watch live updates**. Single-market, neutra
 > пользователю кошелёк в TEE; он создаётся пустым — ETH на газ для первой транзакции нужно прислать
 > самому (ссылка на фаусет MegaETH есть в диалоге Faucet).
 
-3. **Install & run:**
+2. **Install & run:**
    ```bash
    pnpm install
    pnpm dev

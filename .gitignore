@@ -23,7 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local auth config — copy from .npmrc.example and fill GITHUB_TOKEN
+# Local npm config (may hold tokens) — never commit
 .npmrc
 
 # Environment
