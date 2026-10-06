@@ -339,6 +339,8 @@ test.describe("position actions", () => {
     await expect(capped).toBeVisible();
     await expect(capped).toContainText("0.5");
     await expect(capped).toContainText("capped to position size");
+    // Подпись ячейки называет подписанный размер: он остаётся виден.
+    await expect(capped).toHaveAttribute("title", /Signed for 1/);
     await expect(userInfo.orderRow("tp-1")).toBeVisible();
     await expect(
       userInfo.orderRow("tp-1").getByTestId("order-size-capped"),
@@ -346,9 +348,78 @@ test.describe("position actions", () => {
 
     await userInfo.selectTab("positions");
     await userInfo.editTpSl(MARKET.id).click();
-    const note = page.getByTestId("tpsl-size-capped");
-    await expect(note).toContainText("Closes 0.5");
+    const note = page.getByTestId("tpsl-size-capped-sl");
+    await expect(note).toContainText("Stop loss closes 0.5");
     await expect(note).toContainText("capped to position size");
+    await expect(note).toContainText("signed for 1");
+    // Урезан только стоп: у тейка, подписанного ровно на позицию, строки нет.
+    await expect(page.getByTestId("tpsl-size-capped-tp")).toHaveCount(0);
+  });
+
+  test("a dialog with both legs capped names each leg and its own signed size (TRM-21)", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture({ positionSize: WAD / 2n })];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          sizeDelta: (-3n * WAD).toString(),
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.editTpSl(MARKET.id).click();
+    const tp = page.getByTestId("tpsl-size-capped-tp");
+    const sl = page.getByTestId("tpsl-size-capped-sl");
+    await expect(tp).toContainText("Take profit closes 0.5");
+    await expect(tp).toContainText("signed for 3");
+    await expect(sl).toContainText("Stop loss closes 0.5");
+    await expect(sl).toContainText("signed for 1");
+  });
+
+  test("the Size column sorts by the size a bracket will close, not the signed one (TRM-21)", async ({
+    page,
+    world,
+  }) => {
+    // SL подписан на 1.0, позиция 0.5 — он закроет 0.5; соседний лимит на 0.7.
+    // По подписанному размеру порядок был бы обратным: 1.0 > 0.7.
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture({ positionSize: WAD / 2n })];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
+      w.openOrders = [
+        limitOrderFixture({ id: "lim-1", sizeDelta: ((7n * WAD) / 10n).toString() }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("open-orders");
+    await expect(userInfo.orderRow("sl-1")).toBeVisible();
+    const rowIds = () =>
+      userInfo.ordersTable
+        .locator("tbody tr")
+        .evaluateAll((rows) => rows.map((r) => r.getAttribute("data-testid")));
+    // Числовая колонка сортируется сперва по убыванию, вторым щелчком — по
+    // возрастанию. По действующему размеру 0.5 (sl-1) < 0.7 (lim-1); по
+    // подписанному было бы 1.0 > 0.7, и порядок обоих щелчков обернулся бы.
+    await page.getByTestId("table-header-size").click();
+    await expect.poll(rowIds).toEqual([
+      "orders-table-row-lim-1",
+      "orders-table-row-sl-1",
+    ]);
+    await page.getByTestId("table-header-size").click();
+    await expect.poll(rowIds).toEqual([
+      "orders-table-row-sl-1",
+      "orders-table-row-lim-1",
+    ]);
   });
 
   test("clearing the SL field only cancels", async ({ page, world }) => {

@@ -75,9 +75,13 @@ export function TpSlDialog({
     .join(" · ");
   const warning = describeBracketWarning(plan.warn);
   // Скобки исполняются не больше позиции: после частичного закрытия
-  // подписанный размер больше — показываем, сколько закроется (TRM-21).
-  const cappedLeg = [row.brackets.takeProfit, row.brackets.stopLoss].find(
-    (b) => b !== null && b.effectiveSize < b.size,
+  // подписанный размер больше — показываем, сколько закроется (TRM-21). Урезанных
+  // ног может быть две, и у каждой свой подписанный размер, поэтому называем обе.
+  const cappedLegs = [
+    { key: "tp", label: "Take profit", bracket: row.brackets.takeProfit },
+    { key: "sl", label: "Stop loss", bracket: row.brackets.stopLoss },
+  ].filter(
+    (leg) => leg.bracket !== null && leg.bracket.effectiveSize < leg.bracket.size,
   );
 
   // `mutate` (не `mutateAsync`): отказ показывается из `applyBrackets.error`
@@ -142,14 +146,19 @@ export function TpSlDialog({
           Empty field removes the bracket. Orders are reduce-only.
         </p>
 
-        {cappedLeg && (
-          <p
-            data-testid="tpsl-size-capped"
-            className="mt-2 text-[11px] text-muted"
-          >
-            Closes {formatQty(cappedLeg.effectiveSize)} — capped to position size
-            (signed for {formatQty(cappedLeg.size)}).
-          </p>
+        {cappedLegs.length > 0 && (
+          <div data-testid="tpsl-size-capped" className="mt-2">
+            {cappedLegs.map(({ key, label, bracket }) => (
+              <p
+                key={key}
+                data-testid={`tpsl-size-capped-${key}`}
+                className="text-[11px] text-muted"
+              >
+                {label} closes {formatQty(bracket!.effectiveSize)} — capped to
+                position size (signed for {formatQty(bracket!.size)}).
+              </p>
+            ))}
+          </div>
         )}
 
         {rejection !== "" && (

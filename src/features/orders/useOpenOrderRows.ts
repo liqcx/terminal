@@ -47,7 +47,7 @@ export function useOpenOrderRows(): {
   const { data: open = EMPTY, isLoading } = useOpenOrdersQuery(accountId);
   const { data: conditional = EMPTY } = useConditionalOrders();
   // Тот же запрос, что у таблицы позиций и тикета: react-query отдаёт его из
-  // общего кэша, второго обращения к шлюзу нет.
+  // общего кэша, второго обращения к RPC нет.
   const { data: positions = EMPTY_POSITIONS } =
     useEnrichedPositions(allMarketIds);
   // Отмена в SDK инвалидирует оба списка (monorepo#453), поэтому здесь ничего

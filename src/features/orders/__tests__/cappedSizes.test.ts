@@ -57,12 +57,25 @@ describe("cappedSizes", () => {
     expect(m.has("sl-1")).toBe(false);
   });
 
-  it("позиция короткая: нога той же стороны, что позиция, — не скобка", () => {
+  it("короткая позиция: закрывающая BUY-нога урезается до |размера|", () => {
     const m = cappedSizes(
       [{ marketId: 200n, size: Qty(-WAD / 2n) }],
       [sl({ side: Side.BUY, sizeDelta: WAD.toString() })],
     );
     expect(m.get("sl-1")).toBe(WAD / 2n);
+  });
+
+  it("две позиции на разных рынках — урезаны обе, обе записи в карте", () => {
+    const m = cappedSizes(
+      [
+        { marketId: 200n, size: Qty(WAD / 2n) },
+        { marketId: 100n, size: Qty(WAD / 4n) },
+      ],
+      [sl(), sl({ id: "sl-eth", marketId: "100" })],
+    );
+    expect(m.size).toBe(2);
+    expect(m.get("sl-1")).toBe(WAD / 2n);
+    expect(m.get("sl-eth")).toBe(WAD / 4n);
   });
 
   it("нога без своей позиции (сирота) — не скобка, в карте её нет", () => {
