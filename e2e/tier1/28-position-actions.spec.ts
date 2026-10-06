@@ -84,6 +84,11 @@ test.describe("position actions", () => {
 
     await userInfo.selectTab("positions");
     await userInfo.closePosition(MARKET.id).click();
+    // Диалог не приписывает кнопке отмену: скобки снимает расчёт, и текст
+    // называет это исходом закрытия, с числом ног.
+    await expect(userInfo.closeDialog).toContainText(
+      "Attached TP/SL orders (2) are cancelled once the close settles.",
+    );
     await userInfo.closeConfirm.click();
 
     await expect.poll(() => world.submittedOrders.length).toBe(1);

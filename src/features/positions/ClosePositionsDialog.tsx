@@ -86,11 +86,11 @@ export function ClosePositionsDialog({
         </div>
 
         <p className="mt-3 text-[11px] text-muted">
-          Closes at market with a 0.5% slippage bound
+          Closes at market with a 0.5% slippage bound.
           {brackets > 0
-            ? ` and cancels ${brackets} attached TP/SL order${brackets > 1 ? "s" : ""}`
-            : ""}
-          . Resting limit orders are not touched.
+            ? ` Attached TP/SL ${brackets > 1 ? "orders" : "order"} (${brackets}) ${brackets > 1 ? "are" : "is"} cancelled once the close settles.`
+            : ""}{" "}
+          Resting limit orders are not touched.
         </p>
 
         {error && (

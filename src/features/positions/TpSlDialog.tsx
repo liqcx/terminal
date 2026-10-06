@@ -1,4 +1,5 @@
 import {
+  type Bracket,
   bracketsPlanFor,
   describeBracketRejection,
   describeBracketWarning,
@@ -18,6 +19,7 @@ import {
 
 import { parseOrZero } from "../../lib/format";
 import { DecimalInput } from "../../components/ui/DecimalInput";
+import { isCapped } from "../orders/cappedSizes";
 import type { PositionRow } from "./usePositionRows";
 
 /**
@@ -81,7 +83,8 @@ export function TpSlDialog({
     { key: "tp", label: "Take profit", bracket: row.brackets.takeProfit },
     { key: "sl", label: "Stop loss", bracket: row.brackets.stopLoss },
   ].filter(
-    (leg) => leg.bracket !== null && leg.bracket.effectiveSize < leg.bracket.size,
+    (leg): leg is typeof leg & { bracket: Bracket } =>
+      leg.bracket !== null && isCapped(leg.bracket),
   );
 
   // `mutate` (не `mutateAsync`): отказ показывается из `applyBrackets.error`
@@ -154,8 +157,8 @@ export function TpSlDialog({
                 data-testid={`tpsl-size-capped-${key}`}
                 className="text-[11px] text-muted"
               >
-                {label} closes {formatQty(bracket!.effectiveSize)} — capped to
-                position size (signed for {formatQty(bracket!.size)}).
+                {label} closes {formatQty(bracket.effectiveSize)} — capped to
+                position size (signed for {formatQty(bracket.size)}).
               </p>
             ))}
           </div>

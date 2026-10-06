@@ -1,4 +1,14 @@
-import { type GatewayOrder, type Position, positionBrackets } from "@liq/sdk";
+import {
+  type Bracket,
+  type GatewayOrder,
+  type Position,
+  positionBrackets,
+} from "@liq/sdk";
+
+/** Исполнится ли скобка меньшим размером, чем подписана. */
+export function isCapped(b: Bracket): boolean {
+  return b.effectiveSize < b.size;
+}
 
 /**
  * Скобки, которые исполнятся меньшим размером, чем подписаны.
@@ -17,7 +27,7 @@ export function cappedSizes(
   for (const position of positions) {
     const { takeProfit, stopLoss } = positionBrackets(position, conditional);
     for (const b of [takeProfit, stopLoss]) {
-      if (b && b.effectiveSize < b.size) out.set(b.orderId, b.effectiveSize);
+      if (b && isCapped(b)) out.set(b.orderId, b.effectiveSize);
     }
   }
   return out;

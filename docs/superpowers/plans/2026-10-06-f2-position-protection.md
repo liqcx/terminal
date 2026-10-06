@@ -153,8 +153,7 @@ Run: шаг 2 — PASS. `rtk proxy pnpm typecheck` — PASS. `rtk proxy pnpm vit
 
 - [ ] **Step 4: e2e**
 
-Run: `~/Work/perps/terminal/.worktrees/e2e-docker.sh` (весь набор; известные флейки — `28-position-actions:142`,
-`04-trade-market:44`: перепрогнать отдельно, падают и на `main`).
+Run: `~/Work/perps/terminal/.worktrees/e2e-docker.sh` (весь набор; известные флейки — `28-position-actions` («group-less pair»), `04-trade-market:44`: перепрогнать отдельно, падают и на `main`).
 Expected: PASS.
 
 - [ ] **Step 5: Commit**

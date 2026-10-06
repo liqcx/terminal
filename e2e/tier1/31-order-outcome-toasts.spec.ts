@@ -83,6 +83,9 @@ test.describe("order outcome toasts", () => {
     await expect(userInfo.orderRow("ord-cond-1")).toBeVisible();
     await newestConnectionHas(world);
 
+    // Расчёт снял скобку и на шлюзе: поток лишь помечает список устаревшим
+    // (`orderStateChanged`), а строка уходит с перечитанным ответом шлюза.
+    world.conditionalOrders = [];
     world.sseFrames = [
       sseOrderUpdateFrame("ord-cond-1", "CANCELLED", {
         reason: "position_closed",
@@ -93,6 +96,9 @@ test.describe("order outcome toasts", () => {
     await expect(toasts.outcome).toHaveCount(1, { timeout: 15_000 });
     await expect(toasts.outcome).toContainText("Stop loss cancelled");
     await expect(toasts.outcome).toContainText("The position was closed.");
+    await expect(userInfo.orderRow("ord-cond-1")).toBeHidden({
+      timeout: 15_000,
+    });
   });
 
   test("the same outcome twice is one toast", async ({ page, world }) => {
