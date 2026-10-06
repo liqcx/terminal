@@ -658,13 +658,19 @@ export function limitOrderFixture(
     status: "PENDING",
     limitPrice: (60_000n * WAD).toString(),
     triggerPrice: null,
+    reduceOnly: false,
     createdAt: "2026-01-01T00:00:00.000Z",
     groupId: null,
     ...overrides,
   };
 }
 
-/** A stop-market trigger order. */
+/**
+ * A stop-market trigger order.
+ *
+ * @remarks `reduceOnly: true`, как у ноги скобки: SDK 0.65.0 считает скобкой
+ * только reduce-only ногу, закрывающую позицию, — SELL у длинной.
+ */
 export function conditionalOrderFixture(
   overrides: Partial<GatewayOrder> = {},
 ): GatewayOrder {
@@ -678,6 +684,7 @@ export function conditionalOrderFixture(
     status: "TRIGGER_PENDING",
     limitPrice: null,
     triggerPrice: (80_000n * WAD).toString(),
+    reduceOnly: true,
     createdAt: "2026-01-01T00:00:00.000Z",
     groupId: null,
     ...overrides,

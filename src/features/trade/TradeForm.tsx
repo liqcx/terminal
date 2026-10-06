@@ -157,7 +157,7 @@ export function TradeForm() {
   const brackets =
     marketId === undefined
       ? NO_BRACKETS
-      : positionBrackets(marketId, conditional);
+      : positionBrackets(openPosition, conditional);
   // Скобки судятся, только когда их собираются поставить: погашенный тумблер и
   // два пустых поля — это «скобок нет», а не «скобки плохие».
   const bracketsOn = tpslOn && (tpPrice > 0n || slPrice > 0n);

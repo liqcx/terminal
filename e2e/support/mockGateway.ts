@@ -207,6 +207,7 @@ function restSubmittedOrder(
     limitPrice: payload.limitPrice != null ? String(payload.limitPrice) : null,
     triggerPrice:
       payload.triggerPrice != null ? String(payload.triggerPrice) : null,
+    reduceOnly: payload.reduceOnly === true,
     createdAt: "2026-01-01T00:00:00.000Z",
     groupId: null,
   };

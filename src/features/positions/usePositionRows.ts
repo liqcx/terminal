@@ -3,6 +3,7 @@ import {
   type PositionBrackets,
   positionBrackets,
   Price,
+  type Qty,
 } from "@liq/sdk";
 import {
   useAccountId,
@@ -49,10 +50,12 @@ interface PriceEntry {
 /**
  * Сборка строк — отдельно от хука, чтобы её можно было проверить без React.
  *
- * @remarks Позиция здесь описана одним полем: всё, что сборке от неё нужно, —
- * рынок, по которому ищутся символ, цена и скобки.
+ * @remarks Позиция здесь описана двумя полями: рынок и знаковый размер. Рынок
+ * нужен, чтобы найти символ, цену и скобки; знак размера говорит, какая нога
+ * закрывает позицию, а модуль — сколько из подписанного размера скобки
+ * исполнится.
  */
-export function buildPositionRows<P extends { marketId: bigint }>(input: {
+export function buildPositionRows<P extends { marketId: bigint; size: Qty }>(input: {
   positions: readonly P[];
   markets: readonly { id: bigint; symbol: string }[];
   prices: Record<string, PriceEntry | undefined> | undefined;
@@ -64,7 +67,10 @@ export function buildPositionRows<P extends { marketId: bigint }>(input: {
       position,
       symbol: marketSymbol(input.markets, position.marketId),
       markPrice: input.prices?.[key]?.price,
-      brackets: positionBrackets(position.marketId, input.conditional),
+      // Позиция целиком, а не рынок: скобкой считается только нога, которая
+      // эту позицию закрывает (SDK 0.65.0). Раньше сирота закрытой позиции
+      // становилась «стопом» следующей, и редактор отменял её (TRM-9).
+      brackets: positionBrackets(position, input.conditional),
     };
   });
 }
