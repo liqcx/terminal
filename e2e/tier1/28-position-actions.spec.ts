@@ -63,7 +63,7 @@ test.describe("position actions", () => {
     expect(eth?.side).toBe("BUY");
   });
 
-  test("closing cancels the position's brackets and leaves resting limits alone", async ({
+  test("closing submits only the close order — brackets are the backend's to cancel", async ({
     page,
     world,
   }) => {
@@ -84,14 +84,52 @@ test.describe("position actions", () => {
 
     await userInfo.selectTab("positions");
     await userInfo.closePosition(MARKET.id).click();
+    // Диалог не приписывает кнопке отмену: скобки снимает расчёт, и текст
+    // называет это исходом закрытия, с числом ног.
+    await expect(userInfo.closeDialog).toContainText(
+      "Attached TP/SL orders (2) are cancelled once the close settles.",
+    );
     await userInfo.closeConfirm.click();
 
     await expect.poll(() => world.submittedOrders.length).toBe(1);
-    // Осиротевший reduce-only триггер исполниться не может, но в списке
-    // условных читается как живой — поэтому снимается вместе с позицией.
-    expect(new Set(world.cancelledOrderIds)).toEqual(new Set(["sl-1", "tp-1"]));
-    // А отдыхающая лимитка не трогается: кнопка про неё не говорила.
-    expect(world.cancelledOrderIds).not.toContain("rest-1");
+    // Диалог закрывается после возврата `close()`: пока он виден, проход ещё
+    // идёт, и отмена, поданная ПОСЛЕ закрытия, не проскочила бы мимо проверки.
+    await expect(userInfo.closeDialog).toBeHidden();
+    // Скобки снимает расчёт, закрывший позицию (Ф2): отмена до подачи
+    // оставляла позицию без защиты, если закрытие не исполнялось.
+    expect(world.cancelledOrderIds).toEqual([]);
+  });
+
+  test("a refused close leaves the brackets in place", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+      ];
+      w.faults.routeStatus.submitOrder = 422;
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.closePosition(MARKET.id).click();
+    await userInfo.closeConfirm.click();
+
+    // Отказ шлюза остаётся на экране; он же точка стабилизации — к этому
+    // моменту проход закрытия кончился, и поздняя отмена уже проявилась бы.
+    await expect(page.getByTestId("close-positions-error")).toContainText(
+      "could not be closed",
+    );
+    // Закрытие не исполнилось — позиция без защиты не остаётся.
+    expect(world.cancelledOrderIds).toEqual([]);
   });
 
   test("editing TP cancels the old trigger and submits a new one", async ({
@@ -117,6 +155,8 @@ test.describe("position actions", () => {
     await expect(userInfo.tpslDialog).toBeVisible();
     // Диалог показывает состояние, а не пустой бланк.
     await expect(userInfo.tpslTp).toHaveValue("90000");
+    // Скобка в размер позиции не урезана — строки о размере нет.
+    await expect(page.getByTestId("tpsl-size-capped")).toHaveCount(0);
 
     await userInfo.tpslTp.fill("95000");
     await userInfo.tpslSave.click();
@@ -227,6 +267,164 @@ test.describe("position actions", () => {
     // Замену подать не удалось — предшественника не снимают, иначе позиция
     // осталась бы без скобки. Ради этого подача и идёт раньше отмены.
     expect(world.cancelledOrderIds).toEqual([]);
+  });
+
+  test("a reduce-only leg of the other side is no bracket: not in the row, not cancelled by Save, cancellable in Open Orders (TRM-9)", async ({
+    page,
+    world,
+  }) => {
+    // Сирота закрытой короткой: BUY reduce-only на рынке, где теперь длинная.
+    // Раньше хватало рынка, и она читалась как стоп новой позиции.
+    const orphanTrigger = (123_456n * WAD).toString();
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.conditionalOrders = [
+        conditionalOrderFixture({
+          id: "orphan-1",
+          side: "BUY",
+          sizeDelta: WAD.toString(),
+          triggerPrice: orphanTrigger,
+        }),
+      ];
+      return w;
+    });
+
+    // Колонка TP / SL позиции её цены не показывает.
+    await userInfo.selectTab("positions");
+    await expect(userInfo.positionRow(MARKET.id)).toBeVisible();
+    await expect(userInfo.positionRow(MARKET.id)).not.toContainText("123,456");
+
+    // Редактор открывается пустым, и Save ставит тейк, не трогая сироту.
+    await userInfo.editTpSl(MARKET.id).click();
+    await expect(userInfo.tpslDialog).toBeVisible();
+    await expect(userInfo.tpslTp).toHaveValue("");
+    await expect(userInfo.tpslSl).toHaveValue("");
+    await userInfo.tpslTp.fill("95000");
+    await userInfo.tpslSave.click();
+    await expect(userInfo.tpslDialog).toBeHidden();
+    expect(world.submittedOrders).toHaveLength(1);
+    expect(world.cancelledOrderIds).toEqual([]);
+
+    // Сирота при этом видна в Open Orders, у неё своя кнопка Cancel.
+    await userInfo.selectTab("open-orders");
+    await expect(userInfo.orderRow("orphan-1")).toBeVisible();
+    await expect(userInfo.orderRow("orphan-1")).toContainText("123,456");
+    // Сирота — не скобка: размер не урезается позицией другой стороны.
+    await expect(
+      userInfo.orderRow("orphan-1").getByTestId("order-size-capped"),
+    ).toHaveCount(0);
+    await userInfo.cancelOrder("orphan-1");
+    await expect.poll(() => world.cancelledOrderIds).toEqual(["orphan-1"]);
+  });
+
+  test("a bracket bigger than the position shows the size it will close (TRM-21)", async ({
+    page,
+    world,
+  }) => {
+    // После частичного закрытия SL подписан на 1.0, позиция — 0.5. Тейк подписан
+    // ровно на позицию: он не урезан и маркера не получает.
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture({ positionSize: WAD / 2n })];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          sizeDelta: (-WAD / 2n).toString(),
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("open-orders");
+    const capped = userInfo.orderRow("sl-1").getByTestId("order-size-capped");
+    await expect(capped).toBeVisible();
+    await expect(capped).toContainText("0.5");
+    await expect(capped).toContainText("capped to position size");
+    // Подпись ячейки называет подписанный размер: он остаётся виден.
+    await expect(capped).toHaveAttribute("title", /Signed for 1/);
+    await expect(userInfo.orderRow("tp-1")).toBeVisible();
+    await expect(
+      userInfo.orderRow("tp-1").getByTestId("order-size-capped"),
+    ).toHaveCount(0);
+
+    await userInfo.selectTab("positions");
+    await userInfo.editTpSl(MARKET.id).click();
+    const note = page.getByTestId("tpsl-size-capped-sl");
+    await expect(note).toContainText("Stop loss closes 0.5");
+    await expect(note).toContainText("capped to position size");
+    await expect(note).toContainText("signed for 1");
+    // Урезан только стоп: у тейка, подписанного ровно на позицию, строки нет.
+    await expect(page.getByTestId("tpsl-size-capped-tp")).toHaveCount(0);
+  });
+
+  test("a dialog with both legs capped names each leg and its own signed size (TRM-21)", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture({ positionSize: WAD / 2n })];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          sizeDelta: (-3n * WAD).toString(),
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.editTpSl(MARKET.id).click();
+    const tp = page.getByTestId("tpsl-size-capped-tp");
+    const sl = page.getByTestId("tpsl-size-capped-sl");
+    await expect(tp).toContainText("Take profit closes 0.5");
+    await expect(tp).toContainText("signed for 3");
+    await expect(sl).toContainText("Stop loss closes 0.5");
+    await expect(sl).toContainText("signed for 1");
+  });
+
+  test("the Size column sorts by the size a bracket will close, not the signed one (TRM-21)", async ({
+    page,
+    world,
+  }) => {
+    // SL подписан на 1.0, позиция 0.5 — он закроет 0.5; соседний лимит на 0.7.
+    // По подписанному размеру порядок был бы обратным: 1.0 > 0.7.
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture({ positionSize: WAD / 2n })];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
+      w.openOrders = [
+        limitOrderFixture({ id: "lim-1", sizeDelta: ((7n * WAD) / 10n).toString() }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("open-orders");
+    await expect(userInfo.orderRow("sl-1")).toBeVisible();
+    const rowIds = () =>
+      userInfo.ordersTable
+        .locator("tbody tr")
+        .evaluateAll((rows) => rows.map((r) => r.getAttribute("data-testid")));
+    // Числовая колонка сортируется сперва по убыванию, вторым щелчком — по
+    // возрастанию. По действующему размеру 0.5 (sl-1) < 0.7 (lim-1); по
+    // подписанному было бы 1.0 > 0.7, и порядок обоих щелчков обернулся бы.
+    await page.getByTestId("table-header-size").click();
+    await expect.poll(rowIds).toEqual([
+      "orders-table-row-lim-1",
+      "orders-table-row-sl-1",
+    ]);
+    await page.getByTestId("table-header-size").click();
+    await expect.poll(rowIds).toEqual([
+      "orders-table-row-sl-1",
+      "orders-table-row-lim-1",
+    ]);
   });
 
   test("clearing the SL field only cancels", async ({ page, world }) => {

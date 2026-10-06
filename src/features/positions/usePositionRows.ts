@@ -3,10 +3,10 @@ import {
   type PositionBrackets,
   positionBrackets,
   Price,
+  type Qty,
 } from "@liq/sdk";
 import {
   useAccountId,
-  useCancelOrdersMutation,
   useClosePositions,
   useConditionalOrders,
   useEnrichedPositions,
@@ -38,8 +38,6 @@ export interface PositionRow {
 interface CloseOutcome {
   closed: number;
   failed: number;
-  /** Скобки закрытых позиций, снятые заодно. */
-  cancelled: number;
 }
 
 interface PriceEntry {
@@ -49,10 +47,12 @@ interface PriceEntry {
 /**
  * Сборка строк — отдельно от хука, чтобы её можно было проверить без React.
  *
- * @remarks Позиция здесь описана одним полем: всё, что сборке от неё нужно, —
- * рынок, по которому ищутся символ, цена и скобки.
+ * @remarks Позиция здесь описана двумя полями: рынок и знаковый размер. Рынок
+ * нужен, чтобы найти символ, цену и скобки; знак размера говорит, какая нога
+ * закрывает позицию, а модуль — сколько из подписанного размера скобки
+ * исполнится.
  */
-export function buildPositionRows<P extends { marketId: bigint }>(input: {
+export function buildPositionRows<P extends { marketId: bigint; size: Qty }>(input: {
   positions: readonly P[];
   markets: readonly { id: bigint; symbol: string }[];
   prices: Record<string, PriceEntry | undefined> | undefined;
@@ -64,7 +64,10 @@ export function buildPositionRows<P extends { marketId: bigint }>(input: {
       position,
       symbol: marketSymbol(input.markets, position.marketId),
       markPrice: input.prices?.[key]?.price,
-      brackets: positionBrackets(position.marketId, input.conditional),
+      // Позиция целиком, а не рынок: скобкой считается только нога, которая
+      // эту позицию закрывает (SDK 0.65.0). Раньше сирота закрытой позиции
+      // становилась «стопом» следующей, и редактор отменял её (TRM-9).
+      brackets: positionBrackets(position, input.conditional),
     };
   });
 }
@@ -72,14 +75,11 @@ export function buildPositionRows<P extends { marketId: bigint }>(input: {
 /**
  * Строки таблицы позиций и действия над ними.
  *
- * @remarks Закрытие снимает и скобки закрываемых позиций: reduce-only триггер
- * осиротевшей позиции исполниться не может, но в списке условных остаётся и
- * читается как живой. Отдыхающие лимитные ордера не трогаются — их закрытие
- * позиции не просило (в Liqu «Close All» отменяет и их; здесь это осознанно
- * иначе, чтобы кнопка отвечала своей подписи).
- *
- * Сначала отмена, потом закрытие: скобка, сработавшая между этими шагами, сама
- * уменьшила бы позицию, и закрывающий ордер ушёл бы на размер, которого уже нет.
+ * @remarks Закрытие — одна подача на позицию. Скобки закрытой позиции
+ * снимает backend в транзакции расчёта, который её закрыл (`CANCELLED`,
+ * причина `position_closed`; трейдер видит тост). Терминал раньше снимал их
+ * сам и до подачи: неисполненное закрытие оставляло позицию без защиты.
+ * Отдыхающие лимитные ордера не трогаются — их закрытие позиции не просило.
  */
 export function usePositionRows(): {
   rows: PositionRow[];
@@ -97,7 +97,6 @@ export function usePositionRows(): {
   } = useEnrichedPositions(allMarketIds);
   const { data: prices } = usePricesQuery(allMarketIds);
   const { data: conditional = EMPTY_ORDERS } = useConditionalOrders();
-  const cancelOrders = useCancelOrdersMutation(accountId);
   const { close: closePositions, isPending: isClosing } =
     useClosePositions(accountId);
 
@@ -114,34 +113,15 @@ export function usePositionRows(): {
 
   const close = useCallback(
     async (target: readonly PositionRow[]): Promise<CloseOutcome> => {
-      const bracketIds = target.flatMap((r) =>
-        [r.brackets.takeProfit?.orderId, r.brackets.stopLoss?.orderId].filter(
-          (id): id is string => id !== undefined,
-        ),
-      );
-
-      let cancelled = 0;
-      if (bracketIds.length > 0) {
-        try {
-          const results = await cancelOrders.mutateAsync(bracketIds);
-          cancelled = results.filter((r) => r.status === "CANCELLED").length;
-        } catch {
-          // Скобку снять не удалось — позицию всё равно закрываем: осиротевший
-          // reduce-only триггер безвреден, незакрытая позиция нет.
-          cancelled = 0;
-        }
-      }
-
       const { closed, failed } = await closePositions(
         target.map((r) => ({
           position: r.position,
           markPrice: Price(r.markPrice ?? 0n),
         })),
       );
-
-      return { closed, failed, cancelled };
+      return { closed, failed };
     },
-    [cancelOrders, closePositions],
+    [closePositions],
   );
 
   return { rows, isLoading, isError, close, isClosing };

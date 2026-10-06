@@ -209,6 +209,32 @@ test.describe("market orders", () => {
     await expect.poll(() => world.cancelledOrderIds).toContain("tp-old");
   });
 
+  test("an entry with no position leaves another ticket's legs alone", async ({
+    page,
+    world,
+  }) => {
+    // Нет позиции — нет скобок: SELL reduce-only на этом рынке принадлежит
+    // чужому тикету, и вход с TP не вправе его переставлять.
+    const { trade } = await enterTerminal(page, world, () =>
+      readyWorld({
+        conditionalOrders: [conditionalOrderFixture({ id: "orphan-1" })],
+      }),
+    );
+
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    await trade.entryTpInput.fill("80000");
+    await trade.submit("buy");
+
+    // Вход + новая нога TP; чужая нога не тронута.
+    await expect.poll(() => world.submittedOrders.length).toBe(2);
+    expect(world.submittedOrders.map((o) => o.orderType)).toEqual([
+      "MARKET",
+      "TAKE_PROFIT_MARKET",
+    ]);
+    expect(world.cancelledOrderIds).toEqual([]);
+  });
+
   test("a rejected take-profit leg is named, and the stop is still submitted", async ({
     page,
     world,

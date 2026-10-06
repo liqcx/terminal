@@ -16,9 +16,9 @@ import type { PositionRow } from "./usePositionRows";
  * Подтверждение закрытия — одной позиции или всех.
  *
  * @remarks Закрытие подаёт рыночный ордер: отменить его нельзя, и промах мышью
- * по ✕ стоил бы позиции. Диалог перечисляет ровно то, что уйдёт на провод, —
- * включая скобки, которые снимутся заодно, и обещание не трогать отдыхающие
- * лимитки, раз кнопка про них не говорила.
+ * по ✕ стоил бы позиции. Диалог перечисляет закрываемые позиции, скобки,
+ * которые снимет расчёт закрытия (терминал отмену скобок не шлёт), и обещание
+ * не трогать отдыхающие лимитки, раз кнопка про них не говорила.
  */
 export function ClosePositionsDialog({
   rows,
@@ -86,11 +86,11 @@ export function ClosePositionsDialog({
         </div>
 
         <p className="mt-3 text-[11px] text-muted">
-          Closes at market with a 0.5% slippage bound
+          Closes at market with a 0.5% slippage bound.
           {brackets > 0
-            ? ` and cancels ${brackets} attached TP/SL order${brackets > 1 ? "s" : ""}`
-            : ""}
-          . Resting limit orders are not touched.
+            ? ` Attached TP/SL ${brackets > 1 ? "orders" : "order"} (${brackets}) ${brackets > 1 ? "are" : "is"} cancelled once the close settles.`
+            : ""}{" "}
+          Resting limit orders are not touched.
         </p>
 
         {error && (

@@ -3,11 +3,13 @@ import {
   useAccountId,
   useCancelOrderMutation,
   useConditionalOrders,
+  useEnrichedPositions,
   useOpenOrdersQuery,
 } from "@liq/react";
 import { useMemo } from "react";
 
 import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
+import { cappedSizes } from "./cappedSizes";
 
 /** Строка таблицы открытых ордеров: ордер плюс подпись рынка и отмена. */
 export interface OrderRow {
@@ -26,6 +28,13 @@ export interface OrderRow {
    * теперь он виден — с выключенной отменой.
    */
   cancellable: boolean;
+  /**
+   * Сколько исполнит скобка, если меньше подписанного; `undefined` — не урезана.
+   *
+   * @remarks Движок урезает reduce-only до позиции; после частичного закрытия
+   * подписанный размер больше того, что исполнится (TRM-21).
+   */
+  cappedSize?: bigint;
 }
 
 /** Открытые и условные ордера одной таблицей — как их видит трейдер. */
@@ -33,13 +42,22 @@ export function useOpenOrderRows(): {
   rows: OrderRow[];
   isLoading: boolean;
 } {
-  const { markets } = useSelectedMarket();
+  const { markets, allMarketIds } = useSelectedMarket();
   const accountId = useAccountId();
   const { data: open = EMPTY, isLoading } = useOpenOrdersQuery(accountId);
   const { data: conditional = EMPTY } = useConditionalOrders();
+  // Тот же запрос, что у таблицы позиций и тикета: react-query отдаёт его из
+  // общего кэша, второго обращения к RPC нет.
+  const { data: positions = EMPTY_POSITIONS } =
+    useEnrichedPositions(allMarketIds);
   // Отмена в SDK инвалидирует оба списка (monorepo#453), поэтому здесь ничего
   // инвалидировать не надо.
   const cancel = useCancelOrderMutation(accountId);
+
+  const capped = useMemo(
+    () => cappedSizes(positions, conditional),
+    [positions, conditional],
+  );
 
   const rows = useMemo<OrderRow[]>(
     () =>
@@ -49,8 +67,9 @@ export function useOpenOrderRows(): {
         cancel: (id: string) => cancel.mutate(id),
         cancelling: cancel.isPending,
         cancellable: !isInFlight(order.status),
+        cappedSize: capped.get(order.id),
       })),
-    [open, conditional, markets, cancel],
+    [open, conditional, markets, cancel, capped],
   );
 
   return { rows, isLoading };
@@ -73,3 +92,6 @@ function mergeById(
 }
 
 const EMPTY: GatewayOrder[] = [];
+const EMPTY_POSITIONS: NonNullable<
+  ReturnType<typeof useEnrichedPositions>["data"]
+> = [];

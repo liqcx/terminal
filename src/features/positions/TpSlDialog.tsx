@@ -1,11 +1,12 @@
 import {
+  type Bracket,
   bracketsPlanFor,
   describeBracketRejection,
   describeBracketWarning,
   Price,
 } from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
-import { humanizeError, wadToFixed } from "@liq/core";
+import { formatQty, humanizeError, wadToFixed } from "@liq/core";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
 
 import { parseOrZero } from "../../lib/format";
 import { DecimalInput } from "../../components/ui/DecimalInput";
+import { isCapped } from "../orders/cappedSizes";
 import type { PositionRow } from "./usePositionRows";
 
 /**
@@ -74,6 +76,16 @@ export function TpSlDialog({
     .filter((t) => t !== undefined)
     .join(" · ");
   const warning = describeBracketWarning(plan.warn);
+  // Скобки исполняются не больше позиции: после частичного закрытия
+  // подписанный размер больше — показываем, сколько закроется (TRM-21). Урезанных
+  // ног может быть две, и у каждой свой подписанный размер, поэтому называем обе.
+  const cappedLegs = [
+    { key: "tp", label: "Take profit", bracket: row.brackets.takeProfit },
+    { key: "sl", label: "Stop loss", bracket: row.brackets.stopLoss },
+  ].filter(
+    (leg): leg is typeof leg & { bracket: Bracket } =>
+      leg.bracket !== null && isCapped(leg.bracket),
+  );
 
   // `mutate` (не `mutateAsync`): отказ показывается из `applyBrackets.error`
   // ниже, а диалог остаётся открытым — закрывать его поверх ошибки значило бы
@@ -136,6 +148,21 @@ export function TpSlDialog({
         <p className="mt-2 text-[11px] text-muted">
           Empty field removes the bracket. Orders are reduce-only.
         </p>
+
+        {cappedLegs.length > 0 && (
+          <div data-testid="tpsl-size-capped" className="mt-2">
+            {cappedLegs.map(({ key, label, bracket }) => (
+              <p
+                key={key}
+                data-testid={`tpsl-size-capped-${key}`}
+                className="text-[11px] text-muted"
+              >
+                {label} closes {formatQty(bracket.effectiveSize)} — capped to
+                position size (signed for {formatQty(bracket.size)}).
+              </p>
+            ))}
+          </div>
+        )}
 
         {rejection !== "" && (
           <p
