@@ -87,8 +87,43 @@ test.describe("position actions", () => {
     await userInfo.closeConfirm.click();
 
     await expect.poll(() => world.submittedOrders.length).toBe(1);
+    // Диалог закрывается после возврата `close()`: пока он виден, проход ещё
+    // идёт, и отмена, поданная ПОСЛЕ закрытия, не проскочила бы мимо проверки.
+    await expect(userInfo.closeDialog).toBeHidden();
     // Скобки снимает расчёт, закрывший позицию (Ф2): отмена до подачи
     // оставляла позицию без защиты, если закрытие не исполнялось.
+    expect(world.cancelledOrderIds).toEqual([]);
+  });
+
+  test("a refused close leaves the brackets in place", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+      ];
+      w.faults.routeStatus.submitOrder = 422;
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.closePosition(MARKET.id).click();
+    await userInfo.closeConfirm.click();
+
+    // Отказ шлюза остаётся на экране; он же точка стабилизации — к этому
+    // моменту проход закрытия кончился, и поздняя отмена уже проявилась бы.
+    await expect(page.getByTestId("close-positions-error")).toContainText(
+      "could not be closed",
+    );
+    // Закрытие не исполнилось — позиция без защиты не остаётся.
     expect(world.cancelledOrderIds).toEqual([]);
   });
 
