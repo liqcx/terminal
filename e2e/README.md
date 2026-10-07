@@ -1,8 +1,8 @@
 # End-to-end tests
 
-Two tiers of Playwright e2e, mirroring the patterns in the sibling `kwenta`
-app (injected viem wallet, Page Objects keyed on `data-testid`, the
-connect → create-account → SIWE → trade lifecycle).
+Two tiers of Playwright e2e: a hermetic mocked tier that runs in CI and a live
+opt-in tier. Both use an injected viem wallet, Page Objects keyed on `data-testid`,
+and the connect → create-account → SIWE → trade lifecycle.
 
 ## Tier 1 — hermetic (default, CI)
 

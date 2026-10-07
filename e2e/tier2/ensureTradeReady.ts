@@ -1,8 +1,8 @@
 /**
  * Idempotently drive a freshly-connected live wallet into a trade-ready
- * terminal: create the perps account if missing, enable book + SIWE sign-in,
- * and deposit a little margin if the account is empty. Mirrors kwenta's
- * `ensureTradeReady`, reusing the Tier 1 Page Objects against the real backend.
+ * terminal: create the perps account if missing, sign in with SIWE, and
+ * deposit a little margin if the account is empty. Reuses the Tier 1
+ * Page Objects against the real backend.
  */
 import { expect, type Page } from "@playwright/test";
 

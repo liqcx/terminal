@@ -11,16 +11,9 @@ deposit → sign & submit orders → watch live updates**. Single-market, neutra
 ## Quickstart
 
 **Prereqs:** Node 24 + pnpm 11 (`proto use`), a browser wallet (MetaMask), and testnet funds
-(chainId 6343).
+(chainId 6343). The SDK (`@liqpro/*`) installs from public npm — no registry token needed.
 
-1. **Authenticate to the package registry.** The SDK packages are published to a GitHub Packages
-   registry (scope + URL are preconfigured in `.npmrc.example`), which needs a token even for read
-   access. Create a classic PAT with `read:packages`, then:
-   ```bash
-   cp .npmrc.example .npmrc
-   export GITHUB_TOKEN=ghp_your_read_packages_token
-   ```
-2. **Configure the backend.**
+1. **Configure the backend.**
    ```bash
    cp .env.example .env
    # set VITE_GATEWAY_URL to your order-gateway base URL, INCLUDING the API
@@ -34,7 +27,7 @@ deposit → sign & submit orders → watch live updates**. Single-market, neutra
 > пользователю кошелёк в TEE; он создаётся пустым — ETH на газ для первой транзакции нужно прислать
 > самому (ссылка на фаусет MegaETH есть в диалоге Faucet).
 
-3. **Install & run:**
+2. **Install & run:**
    ```bash
    pnpm install
    pnpm dev
@@ -60,7 +53,7 @@ Every step maps to a hook from `@liq/react` (or a class from `@liq/sdk`):
 | Sign in (Turnkey)        | код на почту / подпись кошелька → встроенный кошелёк в TEE | `TurnkeyProviderWrapper`, `createEmbeddedWallet` | `features/auth/TurnkeyLoginButton.tsx`      |
 | Connect (wallet)         | wagmi wallet connect                              | wagmi `useConnect`                             | `features/wallet/ConnectButton.tsx`         |
 | Create account           | mint SNX account NFT                              | `useCreateAccountMutation`                     | `features/auth/SessionCta.tsx`              |
-| Sign in                  | SIWE personal_sign → JWT (+ book mode + register) | `useGatewayAuthMutation`                       | `features/auth/SessionCta.tsx`              |
+| Sign in                  | SIWE personal_sign → JWT (+ register account)     | `useGatewayAuthMutation`                       | `features/auth/SessionCta.tsx`              |
 | Deposit                  | USDC→sUSDC→modifyCollateral multicall             | `useDepositMutation`                           | `features/account/DepositDialog.tsx`        |
 | Markets / price          | list + live price                                 | `useMarketsQuery`, `usePricesQuery`            | `features/market/*`                         |
 | Chart                    | candles backfill + live 1m                        | `client.candles.history/subscribe`             | `features/chart/*`                          |
