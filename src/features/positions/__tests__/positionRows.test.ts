@@ -1,4 +1,4 @@
-import { type GatewayOrder, Qty, Side } from "@liq/sdk";
+import { type GatewayOrder, OrderStatus, OrderType, Qty, Side } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
 import { buildPositionRows } from "../usePositionRows";
@@ -36,7 +36,7 @@ describe("buildPositionRows", () => {
       positions: [{ marketId: 200n, size: LONG }],
       markets: MARKETS,
       prices: { "200": { price: 70_000n * 10n ** 18n } },
-      conditional: [trigger({ id: "tp-9" })],
+      orders: [trigger({ id: "tp-9" })],
     });
 
     expect(row.brackets.takeProfit?.orderId).toBe("tp-9");
@@ -51,7 +51,7 @@ describe("buildPositionRows", () => {
       positions: [{ marketId: 100n, size: LONG }],
       markets: MARKETS,
       prices: undefined,
-      conditional: [trigger({ marketId: "200" })],
+      orders: [trigger({ marketId: "200" })],
     });
 
     expect(row.symbol).toBe("ETH");
@@ -66,7 +66,7 @@ describe("buildPositionRows", () => {
       positions: [{ marketId: 200n, size: LONG }],
       markets: MARKETS,
       prices: {},
-      conditional: [],
+      orders: [],
     });
 
     expect(row.markPrice).toBeUndefined();
@@ -77,7 +77,7 @@ describe("buildPositionRows", () => {
       positions: [{ marketId: 999n, size: LONG }],
       markets: MARKETS,
       prices: undefined,
-      conditional: [],
+      orders: [],
     });
 
     expect(row.symbol).toBe("999");
@@ -88,7 +88,7 @@ describe("buildPositionRows", () => {
       positions: [{ marketId: 200n, size: LONG }],
       markets: MARKETS,
       prices: undefined,
-      conditional: [trigger({ side: Side.BUY, sizeDelta: "1000000000000000000" })],
+      orders: [trigger({ side: Side.BUY, sizeDelta: "1000000000000000000" })],
     });
 
     expect(row.brackets.takeProfit).toBeNull();
@@ -99,10 +99,51 @@ describe("buildPositionRows", () => {
       positions: [{ marketId: 200n, size: Qty(10n ** 18n / 2n) }],
       markets: MARKETS,
       prices: undefined,
-      conditional: [trigger({ id: "tp-9" })],
+      orders: [trigger({ id: "tp-9" })],
     });
 
     expect(row.brackets.takeProfit?.size).toBe(10n ** 18n);
     expect(row.brackets.takeProfit?.effectiveSize).toBe(10n ** 18n / 2n);
+  });
+
+  it("ноги — все reduce-only ордера позиции: две TP и reduce-only лимитка (TRM-48, TRM-57)", () => {
+    const limit = trigger({
+      id: "lim-1",
+      orderType: OrderType.LIMIT,
+      status: OrderStatus.PENDING,
+      triggerPrice: null,
+      limitPrice: (95_000n * 10n ** 18n).toString(),
+      sizeDelta: (-3n * 10n ** 18n).toString(),
+    });
+    const [row] = buildPositionRows({
+      positions: [{ marketId: 200n, size: LONG }],
+      markets: MARKETS,
+      prices: undefined,
+      orders: [trigger({ id: "tp-1" }), trigger({ id: "tp-2" }), limit],
+    });
+
+    expect(row.legs.map((l) => l.orderId)).toEqual(["tp-1", "tp-2", "lim-1"]);
+    expect(row.legs[2].size).toBe(3n * 10n ** 18n);
+    expect(row.legs[2].effectiveSize).toBe(10n ** 18n);
+  });
+
+  it("обычная (не reduce-only) лимитка и ордер чужого рынка в ноги не попадают", () => {
+    const [row] = buildPositionRows({
+      positions: [{ marketId: 200n, size: LONG }],
+      markets: MARKETS,
+      prices: undefined,
+      orders: [
+        trigger({
+          id: "lim-plain",
+          orderType: OrderType.LIMIT,
+          status: OrderStatus.PENDING,
+          reduceOnly: false,
+          triggerPrice: null,
+        }),
+        trigger({ id: "tp-eth", marketId: "100" }),
+      ],
+    });
+
+    expect(row.legs).toEqual([]);
   });
 });

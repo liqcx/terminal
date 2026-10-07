@@ -10,6 +10,7 @@ import { useMemo } from "react";
 
 import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
 import { cappedSizes } from "./cappedSizes";
+import { mergeById } from "./mergeById";
 
 /** Строка таблицы открытых ордеров: ордер плюс подпись рынка и отмена. */
 export interface OrderRow {
@@ -29,10 +30,11 @@ export interface OrderRow {
    */
   cancellable: boolean;
   /**
-   * Сколько исполнит скобка, если меньше подписанного; `undefined` — не урезана.
+   * Сколько исполнит reduce-only ордер, если меньше подписанного; `undefined` — не урезан.
    *
    * @remarks Движок урезает reduce-only до позиции; после частичного закрытия
-   * подписанный размер больше того, что исполнится (TRM-21).
+   * подписанный размер больше того, что исполнится (TRM-21). Касается любого
+   * reduce-only ордера позиции: TP/SL (обе ноги) и reduce-only лимитки (TRM-48).
    */
   cappedSize?: bigint;
 }
@@ -54,14 +56,17 @@ export function useOpenOrderRows(): {
   // инвалидировать не надо.
   const cancel = useCancelOrderMutation(accountId);
 
+  // Открытые первыми: `reduceOnlyLegs` при дубле по id берёт первое вхождение.
+  const merged = useMemo(() => mergeById(open, conditional), [open, conditional]);
+
   const capped = useMemo(
-    () => cappedSizes(positions, conditional),
-    [positions, conditional],
+    () => cappedSizes(positions, merged),
+    [positions, merged],
   );
 
   const rows = useMemo<OrderRow[]>(
     () =>
-      mergeById(open, conditional).map((order) => ({
+      merged.map((order) => ({
         order,
         symbol: marketSymbol(markets, order.marketId),
         cancel: (id: string) => cancel.mutate(id),
@@ -69,26 +74,10 @@ export function useOpenOrderRows(): {
         cancellable: !isInFlight(order.status),
         cappedSize: capped.get(order.id),
       })),
-    [open, conditional, markets, cancel, capped],
+    [merged, markets, cancel, capped],
   );
 
   return { rows, isLoading };
-}
-
-/**
- * Открытые и условные ордера без дублей по id.
- *
- * @remarks Сработавший TP/SL недолго числится в обоих списках: открытый
- * (опрос 10 с, с SDK 0.64.0 несёт `TRIGGERED`) обновился, условный (опрос 60 с)
- * ещё держит `TRIGGER_PENDING`. Побеждает запись открытого списка — у неё
- * свежее состояние, иначе рядом с `TRIGGERED` жила бы строка с живой отменой.
- */
-function mergeById(
-  open: GatewayOrder[],
-  conditional: GatewayOrder[],
-): GatewayOrder[] {
-  const seen = new Set(open.map((o) => o.id));
-  return [...open, ...conditional.filter((o) => !seen.has(o.id))];
 }
 
 const EMPTY: GatewayOrder[] = [];

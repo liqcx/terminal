@@ -2,7 +2,8 @@ import {
   type Bracket,
   type GatewayOrder,
   type Position,
-  positionBrackets,
+  parseWadLoose,
+  reduceOnlyLegs,
 } from "@liq/sdk";
 
 /** Исполнится ли скобка меньшим размером, чем подписана. */
@@ -11,23 +12,46 @@ export function isCapped(b: Bracket): boolean {
 }
 
 /**
- * Скобки, которые исполнятся меньшим размером, чем подписаны.
+ * Неисполненный остаток ордера: `remainingSize`, а пока его нет — `|sizeDelta|`.
  *
- * @remarks После частичного закрытия TP/SL подписан на старый размер, а движок
- * урезает reduce-only до позиции. Экран показывает то, что исполнится (TRM-21).
- * Скобкой считается только нога своей позиции (SDK 0.65.0, `positionBrackets`).
+ * @remarks Та же арифметика, что в `reduceOnlyLegs` (SDK 0.66.0): без исполнений
+ * шлюз отдаёт `remainingSize` пустым, и остаток равен подписанному размеру.
+ */
+function remainingOf(order: GatewayOrder): bigint {
+  const raw = parseWadLoose(order.remainingSize ?? order.sizeDelta);
+  return raw < 0n ? -raw : raw;
+}
+
+/**
+ * Reduce-only ордера, которые позиция урежет: исполнятся меньше, чем осталось.
  *
- * @returns `orderId` → действующий размер; только урезанные.
+ * @remarks Движок урезает reduce-only до позиции. Экран показывает то, что
+ * исполнится: TP/SL после частичного закрытия (TRM-21), reduce-only лимитку
+ * больше позиции и вторую ногу того же вида (TRM-48). Ноги — `reduceOnlyLegs`
+ * (SDK 0.66.0); резерв уже сматченных, но не рассчитанных он не учитывает.
+ * Урезанной считается нога, чей действующий размер меньше её *остатка*, а не
+ * подписанного размера: частично исполненная лимитка с остатком меньше позиции
+ * не урезана — её размер уменьшило исполнение, а не позиция. Дубли по `id` SDK
+ * снимает сам, побеждает первое вхождение: свежий список — открытые ордера —
+ * подают первым; остаток здесь берётся у того же первого вхождения.
+ *
+ * @param orders - открытые и условные ордера счёта.
+ * @returns `orderId` → действующий размер; только урезанные позицией.
  */
 export function cappedSizes(
   positions: readonly Pick<Position, "marketId" | "size">[],
-  conditional: readonly GatewayOrder[],
+  orders: readonly GatewayOrder[],
 ): Map<string, bigint> {
+  const firstById = new Map<string, GatewayOrder>();
+  for (const order of orders) {
+    if (!firstById.has(order.id)) firstById.set(order.id, order);
+  }
   const out = new Map<string, bigint>();
   for (const position of positions) {
-    const { takeProfit, stopLoss } = positionBrackets(position, conditional);
-    for (const b of [takeProfit, stopLoss]) {
-      if (b && isCapped(b)) out.set(b.orderId, b.effectiveSize);
+    for (const leg of reduceOnlyLegs(position, orders)) {
+      const order = firstById.get(leg.orderId);
+      const remaining = order ? remainingOf(order) : leg.size;
+      if (leg.effectiveSize < remaining) out.set(leg.orderId, leg.effectiveSize);
     }
   }
   return out;

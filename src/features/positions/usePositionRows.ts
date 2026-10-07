@@ -4,16 +4,20 @@ import {
   positionBrackets,
   Price,
   type Qty,
+  type ReduceOnlyLeg,
+  reduceOnlyLegs,
 } from "@liq/sdk";
 import {
   useAccountId,
   useClosePositions,
   useConditionalOrders,
   useEnrichedPositions,
+  useOpenOrdersQuery,
   usePricesQuery,
 } from "@liq/react";
 import { useCallback, useMemo } from "react";
 
+import { mergeById } from "../orders/mergeById";
 import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
 
 type EnrichedPosition = NonNullable<
@@ -32,6 +36,14 @@ export interface PositionRow {
    * конкретного условного ордера, и без него правка ищет заявку заново.
    */
   brackets: PositionBrackets;
+  /**
+   * Все reduce-only ордера позиции: оба вида TP/SL и reduce-only лимитки.
+   *
+   * @remarks Их снимает backend при закрытии позиции (Ф2, Ф3), поэтому диалог
+   * Close считает именно `legs`, а не `brackets`: скобок в строке не больше
+   * двух, а ног может быть сколько угодно (TRM-57).
+   */
+  legs: ReduceOnlyLeg[];
 }
 
 /** Чем кончился проход закрытия. */
@@ -48,16 +60,24 @@ interface PriceEntry {
  * Сборка строк — отдельно от хука, чтобы её можно было проверить без React.
  *
  * @remarks Позиция здесь описана двумя полями: рынок и знаковый размер. Рынок
- * нужен, чтобы найти символ, цену и скобки; знак размера говорит, какая нога
- * закрывает позицию, а модуль — сколько из подписанного размера скобки
- * исполнится.
+ * нужен, чтобы найти символ, цену, скобки и reduce-only ордера; знак размера
+ * говорит, какая сторона закрывает позицию, а модуль — сколько из подписанного
+ * размера такой ордер исполнит (`legs`: все reduce-only ордера позиции, не
+ * только TP/SL; `brackets`: по одной ноге каждого вида, для ячеек и редактора TP/SL).
  */
 export function buildPositionRows<P extends { marketId: bigint; size: Qty }>(input: {
   positions: readonly P[];
   markets: readonly { id: bigint; symbol: string }[];
   prices: Record<string, PriceEntry | undefined> | undefined;
-  conditional: readonly GatewayOrder[];
-}): { position: P; symbol: string; markPrice: bigint | undefined; brackets: PositionBrackets }[] {
+  /** Открытые и условные ордера счёта; открытые первыми (`mergeById`). */
+  orders: readonly GatewayOrder[];
+}): {
+  position: P;
+  symbol: string;
+  markPrice: bigint | undefined;
+  brackets: PositionBrackets;
+  legs: ReduceOnlyLeg[];
+}[] {
   return input.positions.map((position) => {
     const key = position.marketId.toString();
     return {
@@ -67,7 +87,8 @@ export function buildPositionRows<P extends { marketId: bigint; size: Qty }>(inp
       // Позиция целиком, а не рынок: скобкой считается только нога, которая
       // эту позицию закрывает (SDK 0.65.0). Раньше сирота закрытой позиции
       // становилась «стопом» следующей, и редактор отменял её (TRM-9).
-      brackets: positionBrackets(position, input.conditional),
+      brackets: positionBrackets(position, input.orders),
+      legs: reduceOnlyLegs(position, input.orders),
     };
   });
 }
@@ -79,7 +100,8 @@ export function buildPositionRows<P extends { marketId: bigint; size: Qty }>(inp
  * снимает backend в транзакции расчёта, который её закрыл (`CANCELLED`,
  * причина `position_closed`; трейдер видит тост). Терминал раньше снимал их
  * сам и до подачи: неисполненное закрытие оставляло позицию без защиты.
- * Отдыхающие лимитные ордера не трогаются — их закрытие позиции не просило.
+ * Reduce-only ордера позиции (TP/SL и reduce-only лимитки) снимает backend
+ * при закрытии (Ф2, Ф3); обычные лимитки не трогаются.
  */
 export function usePositionRows(): {
   rows: PositionRow[];
@@ -96,9 +118,13 @@ export function usePositionRows(): {
     isError,
   } = useEnrichedPositions(allMarketIds);
   const { data: prices } = usePricesQuery(allMarketIds);
+  const { data: open = EMPTY_ORDERS } = useOpenOrdersQuery(accountId);
   const { data: conditional = EMPTY_ORDERS } = useConditionalOrders();
   const { close: closePositions, isPending: isClosing } =
     useClosePositions(accountId);
+
+  // Открытые первыми: при дубле по id SDK берёт первое вхождение.
+  const orders = useMemo(() => mergeById(open, conditional), [open, conditional]);
 
   const rows = useMemo<PositionRow[]>(
     () =>
@@ -106,9 +132,9 @@ export function usePositionRows(): {
         positions,
         markets,
         prices,
-        conditional,
+        orders,
       }),
-    [positions, markets, prices, conditional],
+    [positions, markets, prices, orders],
   );
 
   const close = useCallback(

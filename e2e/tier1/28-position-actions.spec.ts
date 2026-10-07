@@ -3,6 +3,7 @@ import { Qty } from "@liq/sdk";
 import { enterTerminal } from "../pages/flows";
 import { MARKET, MARKET_ETH, WAD } from "../support/constants";
 import { expect, test } from "../support/fixtures";
+import { orderListsLoaded } from "../support/orderLists";
 import {
   conditionalOrderFixture,
   limitOrderFixture,
@@ -47,12 +48,17 @@ test.describe("position actions", () => {
         longPositionFixture({ marketId: MARKET.id }),
         longPositionFixture({ marketId: MARKET_ETH.id, positionSize: -WAD }),
       ];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
       return w;
     });
 
     await userInfo.selectTab("positions");
     await userInfo.closeAll.click();
     await expect(userInfo.closeDialog).toBeVisible();
+    // Одна нога на две позиции: единственное число и «these positions».
+    await expect(userInfo.closeDialog).toContainText(
+      "Reduce-only order of these positions (1) is cancelled once the close settles.",
+    );
     await userInfo.closeConfirm.click();
 
     await expect.poll(() => world.submittedOrders.length).toBe(2);
@@ -84,10 +90,14 @@ test.describe("position actions", () => {
 
     await userInfo.selectTab("positions");
     await userInfo.closePosition(MARKET.id).click();
-    // Диалог не приписывает кнопке отмену: скобки снимает расчёт, и текст
-    // называет это исходом закрытия, с числом ног.
+    // Диалог не приписывает кнопке отмену: reduce-only ордера снимает расчёт,
+    // и текст называет это исходом закрытия, с числом ног. Обычная лимитка
+    // `rest-1` в счёт не идёт.
     await expect(userInfo.closeDialog).toContainText(
-      "Attached TP/SL orders (2) are cancelled once the close settles.",
+      "Reduce-only orders of this position (2) are cancelled once the close settles.",
+    );
+    await expect(userInfo.closeDialog).toContainText(
+      "Other resting limit orders are not touched.",
     );
     await userInfo.closeConfirm.click();
 
@@ -98,6 +108,79 @@ test.describe("position actions", () => {
     // Скобки снимает расчёт, закрывший позицию (Ф2): отмена до подачи
     // оставляла позицию без защиты, если закрытие не исполнялось.
     expect(world.cancelledOrderIds).toEqual([]);
+  });
+
+  test("the close dialog counts every reduce-only order: both TP legs and a reduce-only limit (TRM-57)", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+        conditionalOrderFixture({
+          id: "tp-2",
+          orderType: "TAKE_PROFIT_MARKET",
+          triggerPrice: (95_000n * WAD).toString(),
+        }),
+      ];
+      w.openOrders = [
+        limitOrderFixture({ id: "rest-1" }),
+        limitOrderFixture({
+          id: "ro-1",
+          side: "SELL",
+          sizeDelta: (-WAD).toString(),
+          limitPrice: (99_000n * WAD).toString(),
+          reduceOnly: true,
+        }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.closePosition(MARKET.id).click();
+    // Четыре ноги: SL, обе TP и reduce-only лимитка; обычная `rest-1` не в счёте.
+    await expect(userInfo.closeDialog).toContainText(
+      "Reduce-only orders of this position (4) are cancelled once the close settles.",
+    );
+  });
+
+  test("a fired bracket (TRIGGERED in the open list, stale TRIGGER_PENDING in the conditional one) is no bracket and no leg", async ({
+    page,
+    world,
+  }) => {
+    // Открытый список (опрос 10 с) уже знает, что стоп сработал; условный (60 с)
+    // ещё держит ту же заявку живой. Побеждает открытый: у позиции нет ни
+    // скобки, ни ноги, и Close не обещает отмену того, чего уже нет.
+    const loaded = orderListsLoaded(page);
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.openOrders = [
+        conditionalOrderFixture({ id: "sl-1", status: "TRIGGERED" }),
+      ];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
+      return w;
+    });
+    await loaded;
+
+    await userInfo.selectTab("positions");
+    // Триггер фикстуры — 80 000: живая скобка показала бы его в строке.
+    await expect(userInfo.positionRow(MARKET.id)).toBeVisible();
+    await expect(userInfo.positionRow(MARKET.id)).not.toContainText("80,000");
+    await userInfo.editTpSl(MARKET.id).click();
+    await expect(userInfo.tpslSl).toHaveValue("");
+    await page.keyboard.press("Escape");
+
+    await userInfo.closePosition(MARKET.id).click();
+    await expect(userInfo.closeDialog).toContainText("Closes at market");
+    await expect(userInfo.closeDialog).not.toContainText("Reduce-only");
   });
 
   test("a refused close leaves the brackets in place", async ({
@@ -359,6 +442,63 @@ test.describe("position actions", () => {
     await expect(note).toContainText("signed for 1");
     // Урезан только стоп: у тейка, подписанного ровно на позицию, строки нет.
     await expect(page.getByTestId("tpsl-size-capped-tp")).toHaveCount(0);
+  });
+
+  test("a reduce-only limit bigger than the position shows the size it will close (TRM-48)", async ({
+    page,
+    world,
+  }) => {
+    // Лимитка reduce-only на 3 при позиции 1 исполнится на 1; вторая TP-нога
+    // подписана на 2 и урезана так же. Контроль: лимитка ровно на позицию — нет.
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.openOrders = [
+        limitOrderFixture({
+          id: "l-1",
+          side: "SELL",
+          sizeDelta: (-3n * WAD).toString(),
+          limitPrice: (99_000n * WAD).toString(),
+          reduceOnly: true,
+        }),
+        limitOrderFixture({
+          id: "l-2",
+          side: "SELL",
+          sizeDelta: (-WAD).toString(),
+          limitPrice: (98_000n * WAD).toString(),
+          reduceOnly: true,
+        }),
+      ];
+      w.conditionalOrders = [
+        conditionalOrderFixture({ id: "sl-1" }),
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          triggerPrice: (90_000n * WAD).toString(),
+        }),
+        conditionalOrderFixture({
+          id: "tp-2",
+          orderType: "TAKE_PROFIT_MARKET",
+          sizeDelta: (-2n * WAD).toString(),
+          triggerPrice: (95_000n * WAD).toString(),
+        }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("open-orders");
+    const limit = userInfo.orderRow("l-1").getByTestId("order-size-capped");
+    await expect(limit).toBeVisible();
+    await expect(limit).toContainText("1");
+    await expect(limit).toContainText("capped to position size");
+    await expect(limit).toHaveAttribute("title", /Signed for 3/);
+    // Вторая TP-нога урезана тоже: раньше метку получала только первая.
+    const secondTp = userInfo.orderRow("tp-2").getByTestId("order-size-capped");
+    await expect(secondTp).toBeVisible();
+    await expect(secondTp).toHaveAttribute("title", /Signed for 2/);
+    await expect(
+      userInfo.orderRow("l-2").getByTestId("order-size-capped"),
+    ).toHaveCount(0);
   });
 
   test("a dialog with both legs capped names each leg and its own signed size (TRM-21)", async ({

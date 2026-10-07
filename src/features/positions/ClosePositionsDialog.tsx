@@ -34,13 +34,7 @@ export function ClosePositionsDialog({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const brackets = rows.reduce(
-    (n, r) =>
-      n +
-      (r.brackets.takeProfit ? 1 : 0) +
-      (r.brackets.stopLoss ? 1 : 0),
-    0,
-  );
+  const legs = rows.reduce((n, r) => n + r.legs.length, 0);
   const all = rows.length > 1;
 
   return (
@@ -87,10 +81,10 @@ export function ClosePositionsDialog({
 
         <p className="mt-3 text-[11px] text-muted">
           Closes at market with a 0.5% slippage bound.
-          {brackets > 0
-            ? ` Attached TP/SL ${brackets > 1 ? "orders" : "order"} (${brackets}) ${brackets > 1 ? "are" : "is"} cancelled once the close settles.`
+          {legs > 0
+            ? ` Reduce-only ${legs > 1 ? "orders" : "order"} of ${all ? "these positions" : "this position"} (${legs}) ${legs > 1 ? "are" : "is"} cancelled once the close settles.`
             : ""}{" "}
-          Resting limit orders are not touched.
+          Other resting limit orders are not touched.
         </p>
 
         {error && (
