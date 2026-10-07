@@ -54,14 +54,17 @@ export function useOpenOrderRows(): {
   // инвалидировать не надо.
   const cancel = useCancelOrderMutation(accountId);
 
+  // Открытые первыми: `reduceOnlyLegs` при дубле по id берёт первое вхождение.
+  const merged = useMemo(() => mergeById(open, conditional), [open, conditional]);
+
   const capped = useMemo(
-    () => cappedSizes(positions, conditional),
-    [positions, conditional],
+    () => cappedSizes(positions, merged),
+    [positions, merged],
   );
 
   const rows = useMemo<OrderRow[]>(
     () =>
-      mergeById(open, conditional).map((order) => ({
+      merged.map((order) => ({
         order,
         symbol: marketSymbol(markets, order.marketId),
         cancel: (id: string) => cancel.mutate(id),
@@ -69,7 +72,7 @@ export function useOpenOrderRows(): {
         cancellable: !isInFlight(order.status),
         cappedSize: capped.get(order.id),
       })),
-    [open, conditional, markets, cancel, capped],
+    [merged, markets, cancel, capped],
   );
 
   return { rows, isLoading };
@@ -83,7 +86,7 @@ export function useOpenOrderRows(): {
  * ещё держит `TRIGGER_PENDING`. Побеждает запись открытого списка — у неё
  * свежее состояние, иначе рядом с `TRIGGERED` жила бы строка с живой отменой.
  */
-function mergeById(
+export function mergeById(
   open: GatewayOrder[],
   conditional: GatewayOrder[],
 ): GatewayOrder[] {

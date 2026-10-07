@@ -2,7 +2,7 @@ import {
   type Bracket,
   type GatewayOrder,
   type Position,
-  positionBrackets,
+  reduceOnlyLegs,
 } from "@liq/sdk";
 
 /** Исполнится ли скобка меньшим размером, чем подписана. */
@@ -11,23 +11,26 @@ export function isCapped(b: Bracket): boolean {
 }
 
 /**
- * Скобки, которые исполнятся меньшим размером, чем подписаны.
+ * Reduce-only ордера, которые исполнятся меньшим размером, чем подписаны.
  *
- * @remarks После частичного закрытия TP/SL подписан на старый размер, а движок
- * урезает reduce-only до позиции. Экран показывает то, что исполнится (TRM-21).
- * Скобкой считается только нога своей позиции (SDK 0.65.0, `positionBrackets`).
+ * @remarks Движок урезает reduce-only до позиции. Экран показывает то, что
+ * исполнится: TP/SL после частичного закрытия (TRM-21), reduce-only лимитку
+ * больше позиции и вторую ногу того же вида (TRM-48). Ноги — `reduceOnlyLegs`
+ * (SDK 0.66.0); резерв уже сматченных, но не рассчитанных он не учитывает.
+ * Дубли по `id` SDK снимает сам, побеждает первое вхождение: свежий список —
+ * открытые ордера — подают первым.
  *
+ * @param orders - открытые и условные ордера счёта.
  * @returns `orderId` → действующий размер; только урезанные.
  */
 export function cappedSizes(
   positions: readonly Pick<Position, "marketId" | "size">[],
-  conditional: readonly GatewayOrder[],
+  orders: readonly GatewayOrder[],
 ): Map<string, bigint> {
   const out = new Map<string, bigint>();
   for (const position of positions) {
-    const { takeProfit, stopLoss } = positionBrackets(position, conditional);
-    for (const b of [takeProfit, stopLoss]) {
-      if (b && isCapped(b)) out.set(b.orderId, b.effectiveSize);
+    for (const leg of reduceOnlyLegs(position, orders)) {
+      if (leg.effectiveSize < leg.size) out.set(leg.orderId, leg.effectiveSize);
     }
   }
   return out;

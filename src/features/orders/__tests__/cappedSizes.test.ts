@@ -1,7 +1,8 @@
-import { type GatewayOrder, OrderType, Qty, Side } from "@liq/sdk";
+import { type GatewayOrder, OrderStatus, OrderType, Qty, Side } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
 import { cappedSizes } from "../cappedSizes";
+import { mergeById } from "../useOpenOrderRows";
 
 const WAD = 10n ** 18n;
 
@@ -87,5 +88,53 @@ describe("cappedSizes", () => {
     expect(
       cappedSizes([{ marketId: 100n, size: Qty(WAD / 2n) }], [sl()]).size,
     ).toBe(0);
+  });
+
+  it("reduce-only лимитка больше позиции урезана до позиции (TRM-48)", () => {
+    const limit = sl({
+      id: "l-1",
+      orderType: OrderType.LIMIT,
+      status: OrderStatus.PENDING,
+      triggerPrice: null,
+      limitPrice: (95_000n * WAD).toString(),
+      sizeDelta: (-3n * WAD).toString(),
+    });
+    const m = cappedSizes([{ marketId: 200n, size: Qty(WAD) }], [limit]);
+    expect(m.get("l-1")).toBe(WAD);
+  });
+
+  it("вторая TP-нога тоже урезана, не только первая (TRM-48)", () => {
+    const m = cappedSizes([{ marketId: 200n, size: Qty(WAD / 2n) }], [tp(), tp({ id: "tp-2" })]);
+    expect(m.get("tp-1")).toBe(WAD / 2n);
+    expect(m.get("tp-2")).toBe(WAD / 2n);
+  });
+
+  it("частично исполненная reduce-only лимитка показывает остаток, а при малой позиции — позицию", () => {
+    // Подписана на 3, исполнено 1, остаток 2.
+    const partial = sl({
+      id: "l-2",
+      orderType: OrderType.LIMIT,
+      status: OrderStatus.PARTIALLY_FILLED,
+      triggerPrice: null,
+      limitPrice: (95_000n * WAD).toString(),
+      sizeDelta: (-3n * WAD).toString(),
+      remainingSize: (2n * WAD).toString(),
+    });
+    // Позиция 7 больше остатка: исполнится остаток.
+    expect(cappedSizes([{ marketId: 200n, size: Qty(7n * WAD) }], [partial]).get("l-2")).toBe(
+      2n * WAD,
+    );
+    // Позиция 1 меньше остатка: исполнится позиция.
+    expect(cappedSizes([{ marketId: 200n, size: Qty(WAD) }], [partial]).get("l-2")).toBe(WAD);
+  });
+
+  it("сработавший стоп из открытых побеждает устаревший TRIGGER_PENDING из условных — урезания нет", () => {
+    // Позиция 1/2, стоп подписан на 1: в условных он ещё жив и был бы урезан.
+    const position = [{ marketId: 200n, size: Qty(WAD / 2n) }];
+    const stale = sl();
+    const triggered = sl({ status: OrderStatus.TRIGGERED });
+    expect(cappedSizes(position, mergeById([triggered], [stale])).size).toBe(0);
+    // Контроль: без свежей записи тот же стоп урезан.
+    expect(cappedSizes(position, mergeById([], [stale])).get("sl-1")).toBe(WAD / 2n);
   });
 });
