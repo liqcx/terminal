@@ -17,7 +17,7 @@ import {
 } from "@liq/react";
 import { useCallback, useMemo } from "react";
 
-import { mergeById } from "../orders/useOpenOrderRows";
+import { mergeById } from "../orders/mergeById";
 import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
 
 type EnrichedPosition = NonNullable<
