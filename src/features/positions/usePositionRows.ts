@@ -63,7 +63,7 @@ interface PriceEntry {
  * нужен, чтобы найти символ, цену, скобки и reduce-only ордера; знак размера
  * говорит, какая сторона закрывает позицию, а модуль — сколько из подписанного
  * размера такой ордер исполнит (`legs`: все reduce-only ордера позиции, не
- * только TP/SL; `brackets`: по одной ноге каждого вида, для тикета).
+ * только TP/SL; `brackets`: по одной ноге каждого вида, для ячеек и редактора TP/SL).
  */
 export function buildPositionRows<P extends { marketId: bigint; size: Qty }>(input: {
   positions: readonly P[];

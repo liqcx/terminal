@@ -2,7 +2,7 @@ import { Qty } from "@liq/sdk";
 
 import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
-import { GATEWAY_URL, WAD } from "../support/constants";
+import { GATEWAY_URL, MARKET, WAD } from "../support/constants";
 import { orderListsLoaded } from "../support/orderLists";
 import {
   conditionalOrderFixture,
@@ -218,7 +218,7 @@ test.describe("market orders", () => {
     // ещё держит его живым. Тикет берёт скобки так же, как строка позиции, —
     // из слияния, где побеждает открытый, — и нового стопа не «переставляет».
     const loaded = orderListsLoaded(page);
-    const { trade } = await enterTerminal(page, world, () => {
+    const { trade, userInfo } = await enterTerminal(page, world, () => {
       const w = readyWorld();
       w.accounts[0].positions = [longPositionFixture()];
       w.openOrders = [
@@ -228,6 +228,10 @@ test.describe("market orders", () => {
       return w;
     });
     await loaded;
+    // Без позиции `positionBrackets` отдаёт пустые скобки, и тест прошёл бы
+    // вхолостую: ждём, пока позиция дойдёт до экрана (тот же запрос, что у тикета).
+    await userInfo.selectTab("positions");
+    await expect(userInfo.positionRow(MARKET.id)).toBeVisible();
 
     await trade.setSize("0.5");
     await trade.tpslToggle.click();
