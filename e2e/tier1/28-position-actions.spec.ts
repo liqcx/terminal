@@ -3,6 +3,7 @@ import { Qty } from "@liq/sdk";
 import { enterTerminal } from "../pages/flows";
 import { MARKET, MARKET_ETH, WAD } from "../support/constants";
 import { expect, test } from "../support/fixtures";
+import { orderListsLoaded } from "../support/orderLists";
 import {
   conditionalOrderFixture,
   limitOrderFixture,
@@ -148,6 +149,38 @@ test.describe("position actions", () => {
     await expect(userInfo.closeDialog).toContainText(
       "Reduce-only orders of this position (4) are cancelled once the close settles.",
     );
+  });
+
+  test("a fired bracket (TRIGGERED in the open list, stale TRIGGER_PENDING in the conditional one) is no bracket and no leg", async ({
+    page,
+    world,
+  }) => {
+    // Открытый список (опрос 10 с) уже знает, что стоп сработал; условный (60 с)
+    // ещё держит ту же заявку живой. Побеждает открытый: у позиции нет ни
+    // скобки, ни ноги, и Close не обещает отмену того, чего уже нет.
+    const loaded = orderListsLoaded(page);
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.openOrders = [
+        conditionalOrderFixture({ id: "sl-1", status: "TRIGGERED" }),
+      ];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
+      return w;
+    });
+    await loaded;
+
+    await userInfo.selectTab("positions");
+    // Триггер фикстуры — 80 000: живая скобка показала бы его в строке.
+    await expect(userInfo.positionRow(MARKET.id)).toBeVisible();
+    await expect(userInfo.positionRow(MARKET.id)).not.toContainText("80,000");
+    await userInfo.editTpSl(MARKET.id).click();
+    await expect(userInfo.tpslSl).toHaveValue("");
+    await page.keyboard.press("Escape");
+
+    await userInfo.closePosition(MARKET.id).click();
+    await expect(userInfo.closeDialog).toContainText("Closes at market");
+    await expect(userInfo.closeDialog).not.toContainText("Reduce-only");
   });
 
   test("a refused close leaves the brackets in place", async ({

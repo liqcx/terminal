@@ -3,6 +3,7 @@ import { Qty } from "@liq/sdk";
 import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
 import { GATEWAY_URL, WAD } from "../support/constants";
+import { orderListsLoaded } from "../support/orderLists";
 import {
   conditionalOrderFixture,
   longPositionFixture,
@@ -207,6 +208,37 @@ test.describe("market orders", () => {
     // Старый тейк переставлен, а не оставлен вторым уровнем: иначе позиция
     // закрылась бы по 90 000, хотя пользователь назвал 95 000.
     await expect.poll(() => world.cancelledOrderIds).toContain("tp-old");
+  });
+
+  test("a fired stop (TRIGGERED in the open list, stale TRIGGER_PENDING in the conditional one) is not replaced by the ticket", async ({
+    page,
+    world,
+  }) => {
+    // Тот же ордер в двух списках: открытый знает, что стоп сработал, условный
+    // ещё держит его живым. Тикет берёт скобки так же, как строка позиции, —
+    // из слияния, где побеждает открытый, — и нового стопа не «переставляет».
+    const loaded = orderListsLoaded(page);
+    const { trade } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      w.openOrders = [
+        conditionalOrderFixture({ id: "sl-1", status: "TRIGGERED" }),
+      ];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
+      return w;
+    });
+    await loaded;
+
+    await trade.setSize("0.5");
+    await trade.tpslToggle.click();
+    await trade.entrySlInput.fill("60000");
+    await trade.submit();
+
+    // Вход + новый стоп; поля очищаются, когда подача кончилась целиком —
+    // отмена, если бы она была, уже вышла бы.
+    await expect.poll(() => world.submittedOrders.length).toBe(2);
+    await expect(trade.entrySlInput).toHaveValue("");
+    expect(world.cancelledOrderIds).toEqual([]);
   });
 
   test("an entry with no position leaves another ticket's legs alone", async ({

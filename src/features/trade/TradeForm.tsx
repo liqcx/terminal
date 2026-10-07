@@ -17,6 +17,7 @@ import {
   useAvailableMarginQuery,
   useConditionalOrders,
   useEnrichedPositions,
+  useOpenOrdersQuery,
   useOrderSubmission,
   useSessionStage,
   useTradeStore,
@@ -28,6 +29,7 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { parseOrZero } from "../../lib/format";
+import { mergeById } from "../orders/mergeById";
 import { SessionCta } from "../auth/SessionCta";
 import { useSelectedMarket } from "../market/useSelectedMarket";
 import { EntryTpSlFields } from "./EntryTpSlFields";
@@ -84,7 +86,10 @@ export function TradeForm() {
   // порядок подачи и сбор отказов живут в SDK.
   const applyBrackets = useApplyBracketsMutation(accountId);
   // Скобки ставятся на позицию, а не на вход, поэтому тикету нужно то же, что
-  // и строке позиции: её текущий размер и её действующие скобки.
+  // и строке позиции: её текущий размер и её действующие скобки — из тех же
+  // открытых и условных ордеров (`mergeById`, открытые первыми): сработавший
+  // TP/SL до минуты числится в условных как живой, а в открытых уже `TRIGGERED`.
+  const { data: open = EMPTY_ORDERS } = useOpenOrdersQuery(accountId);
   const { data: conditional = EMPTY_ORDERS } = useConditionalOrders();
   const { data: positions = EMPTY_POSITIONS } =
     useEnrichedPositions(allMarketIds);
@@ -154,7 +159,7 @@ export function TradeForm() {
   const slPrice = Price(parseOrZero(Price.parse, sl));
   // Нет позиции — нет скобок, и план входа ставит новые ноги (SDK 0.65.0
   // отдаёт пустые скобки для `undefined`).
-  const brackets = positionBrackets(openPosition, conditional);
+  const brackets = positionBrackets(openPosition, mergeById(open, conditional));
   // Скобки судятся, только когда их собираются поставить: погашенный тумблер и
   // два пустых поля — это «скобок нет», а не «скобки плохие».
   const bracketsOn = tpslOn && (tpPrice > 0n || slPrice > 0n);
