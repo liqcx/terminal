@@ -47,12 +47,17 @@ test.describe("position actions", () => {
         longPositionFixture({ marketId: MARKET.id }),
         longPositionFixture({ marketId: MARKET_ETH.id, positionSize: -WAD }),
       ];
+      w.conditionalOrders = [conditionalOrderFixture({ id: "sl-1" })];
       return w;
     });
 
     await userInfo.selectTab("positions");
     await userInfo.closeAll.click();
     await expect(userInfo.closeDialog).toBeVisible();
+    // Одна нога на две позиции: единственное число и «these positions».
+    await expect(userInfo.closeDialog).toContainText(
+      "Reduce-only order of these positions (1) is cancelled once the close settles.",
+    );
     await userInfo.closeConfirm.click();
 
     await expect.poll(() => world.submittedOrders.length).toBe(2);
