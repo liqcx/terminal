@@ -41,6 +41,15 @@ describe("Position History — новые сверху", () => {
     ]);
   });
 
+  it("решает closedAt, а не openedAt, когда они расходятся", () => {
+    // Открыт раньше, закрыт позже — всё равно наверху: порядок по закрытию.
+    const server = [episode(200n, 1_100, 1_200), episode(100n, 1_000, 1_300)];
+    expect(newestFirst(server).map(key)).toEqual([
+      "100:1000:1300",
+      "200:1100:1200",
+    ]);
+  });
+
   it("при равном closedAt выше тот, что открыт позже", () => {
     const server = [episode(100n, 1_000, 2_000), episode(200n, 1_500, 2_000)];
     expect(newestFirst(server).map(key)).toEqual([

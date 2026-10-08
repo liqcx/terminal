@@ -43,6 +43,39 @@ test.describe("истории нижней панели", () => {
     await expect(row).toContainText("Trade");
   });
 
+  test("история позиций ставит последний закрытый эпизод наверх", async ({
+    page,
+    world,
+  }) => {
+    // Шлюз отдаёт эпизоды в порядке закрытия, старые первыми. Второй эпизод
+    // открыт позже и закрыт позже — он и должен оказаться первой строкой.
+    const { userInfo } = await enterTerminal(page, world, () =>
+      readyWorld({
+        positionHistory: {
+          available: true,
+          episodes: [
+            positionEpisodeFixture({
+              openedAt: 1_717_200_000,
+              closedAt: 1_717_203_600,
+            }),
+            positionEpisodeFixture({
+              openedAt: 1_717_210_000,
+              closedAt: 1_717_213_600,
+            }),
+          ],
+        },
+      }),
+    );
+
+    await userInfo.selectTab("position-history");
+    const rows = page.locator('[data-testid^="position-history-table-row-"]');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toHaveAttribute(
+      "data-testid",
+      `position-history-table-row-${MARKET.id}-1717210000`,
+    );
+  });
+
   test("молчащий индексатор отличается от пустой истории", async ({
     page,
     world,
