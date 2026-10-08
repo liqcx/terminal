@@ -13,7 +13,7 @@ function requireGatewayUrl(): string {
       "VITE_GATEWAY_URL is not set. Without it the terminal cannot reach the " +
         "order-gateway, so sign-in (SIWE) and every gateway request fail " +
         "silently. Copy .env.example to .env and set VITE_GATEWAY_URL " +
-        "(e.g. https://staging.hype.cheap/v1 — include the /v1 version prefix).",
+        "(e.g. https://staging.liqu.si/v1 — include the /v1 version prefix).",
     );
   }
   return url;
