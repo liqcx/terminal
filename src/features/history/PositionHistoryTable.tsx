@@ -10,6 +10,7 @@ import { features, marketFilterFn } from "@/components/data-table/features";
 
 import { DASH, fmtPrice, fmtSignedUsd, fmtTime } from "../../lib/format";
 import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
+import { newestFirst } from "./positionHistory";
 
 interface Row {
   episode: PositionEpisode;
@@ -137,7 +138,7 @@ export function PositionHistoryTable() {
 
   const rows = useMemo<Row[]>(
     () =>
-      (data?.episodes ?? []).map((episode) => ({
+      newestFirst(data?.episodes ?? []).map((episode) => ({
         episode,
         symbol: episode.symbol ?? marketSymbol(markets, episode.marketId),
       })),
