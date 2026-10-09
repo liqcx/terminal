@@ -123,7 +123,7 @@ export function TradeForm() {
   );
 
   // The active tab's price field, parsed (0n = blank/unparseable). Market —
-  // марк, Limit — введённая цена: по ней превью контракта считает комиссию, а
+  // марк, Limit — введённая цена (превью берёт сглаженный марк, см. previewPrice); а
   // `tabPriceReady` держит submit закрытым, пока у лимитки цены нет.
   const tabPrice =
     tab === "Market" ? markPrice : parseOrZero(Price.parse, limitPrice);
@@ -134,7 +134,8 @@ export function TradeForm() {
     available: margins?.available ?? 0n,
     free: gatewayMargin?.free,
     markPrice,
-    tabPrice,
+    tab,
+    limitPrice: parseOrZero(Price.parse, limitPrice),
   });
   // Пока SDK подаёт ноги, тикет ещё занят: `submitOrder.isPending` гаснет на
   // принятом входе, а скобки уходят после него. Без этого второй вход в то же

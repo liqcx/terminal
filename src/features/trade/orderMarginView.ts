@@ -71,3 +71,25 @@ export function rowsView(input: { long: SideRow; short: SideRow }): RowsView {
     },
   };
 }
+
+/** Задержка цены превью на вкладке Market: поток марка (~250 мс) иначе гонял бы мультиколлу на каждый тик. */
+export const MARK_DEBOUNCE_MS = 2000;
+
+/**
+ * Цена, по которой спрашивается превью контракта.
+ *
+ * @remarks Limit — введённая цена как есть, без задержки (`0n` — поля нет,
+ * превью выключено). Market — марк, сглаженный `debouncedMark`: ключ запроса
+ * несёт цену, и сырой марк на каждом тике сбрасывал бы строки в «—» и бил в RPC
+ * шестью чтениями на сторону. Пока сглаженного марка ещё нет (`0n`, первый
+ * кадр), берётся сырой: первое число не ждёт задержки.
+ */
+export function previewPrice(input: {
+  tab: "Market" | "Limit";
+  mark: bigint;
+  debouncedMark: bigint;
+  limit: bigint;
+}): bigint {
+  if (input.tab === "Limit") return input.limit;
+  return input.debouncedMark > 0n ? input.debouncedMark : input.mark;
+}

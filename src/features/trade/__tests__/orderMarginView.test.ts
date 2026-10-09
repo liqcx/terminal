@@ -1,7 +1,12 @@
 import { Margin, Price, Usd } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
-import { lockAmount, rowsView, warnRequirement } from "../orderMarginView";
+import {
+  lockAmount,
+  previewPrice,
+  rowsView,
+  warnRequirement,
+} from "../orderMarginView";
 
 const usd = (s: string) => Margin(Usd.parse(s));
 
@@ -69,5 +74,35 @@ describe("rowsView", () => {
     });
     expect(rows.margin).toEqual({ long: "$10.00", short: "—" });
     expect(rows.liqPrice).toEqual({ long: "5", short: "—" });
+  });
+});
+
+describe("previewPrice", () => {
+  const MARK = 70_000n;
+  const SLOW = 69_900n;
+  const LIMIT = 65_000n;
+
+  it("Market — сглаженный марк, а не сырой", () => {
+    expect(
+      previewPrice({ tab: "Market", mark: MARK, debouncedMark: SLOW, limit: LIMIT }),
+    ).toBe(SLOW);
+  });
+
+  it("Market, сглаженного марка ещё нет — сырой, без ожидания", () => {
+    expect(
+      previewPrice({ tab: "Market", mark: MARK, debouncedMark: 0n, limit: LIMIT }),
+    ).toBe(MARK);
+  });
+
+  it("Limit — введённая цена, марки не участвуют", () => {
+    expect(
+      previewPrice({ tab: "Limit", mark: MARK, debouncedMark: SLOW, limit: LIMIT }),
+    ).toBe(LIMIT);
+  });
+
+  it("Limit без цены — 0n (превью выключено), а не марк", () => {
+    expect(
+      previewPrice({ tab: "Limit", mark: MARK, debouncedMark: SLOW, limit: 0n }),
+    ).toBe(0n);
   });
 });

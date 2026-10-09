@@ -13,6 +13,7 @@ import {
   validateOrder,
 } from "@liq/sdk";
 import {
+  useDebounce,
   useMarginUsage,
   useOrderMarginPreview,
 } from "@liq/react";
@@ -23,6 +24,8 @@ import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
 import {
   lockAmount,
+  MARK_DEBOUNCE_MS,
+  previewPrice,
   type RowsView,
   rowsView,
   warnRequirement,
@@ -104,13 +107,13 @@ export function useOrderSizing(params: {
   /** Шлюзовой `free` (`available − locked`, знаковый); `undefined` — не прочитан. */
   free: bigint | undefined;
   markPrice: bigint;
-  /**
-   * Цена активной вкладки: Market — марк, Limit — введённая цена. `0n` — цены
-   * нет (пустое поле лимитки), и превью не запрашивается.
-   */
-  tabPrice: bigint;
+  /** Активная вкладка тикета. */
+  tab: "Market" | "Limit";
+  /** Введённая лимитная цена; `0n` — поля нет, и на Limit превью не запрашивается. */
+  limitPrice: bigint;
 }): OrderSizing {
-  const { market, accountId, available, free, markPrice, tabPrice } = params;
+  const { market, accountId, available, free, markPrice, tab, limitPrice } =
+    params;
 
   const [sizeStr, setSizeStrRaw] = useState("");
   const [unit, setUnitRaw] = useState<SizeUnit>("base");
@@ -144,18 +147,22 @@ export function useOrderSizing(params: {
   // Превью контракта по цене вкладки, по запросу на сторону: у тикета две
   // кнопки, и лонг с шортом дают разное R1 и разную ликвидацию. Без рынка
   // `accountId` не передаётся — запрос выключен, а не спрошен про рынок 0.
+  const debouncedMark = useDebounce(markPrice, MARK_DEBOUNCE_MS);
+  const priceForPreview = Price(
+    previewPrice({ tab, mark: markPrice, debouncedMark, limit: limitPrice }),
+  );
   const previewAccount = market === undefined ? undefined : accountId;
   const longPreview = useOrderMarginPreview(
     previewAccount,
     market?.id ?? 0n,
     summary.long.sizeDelta,
-    Price(tabPrice),
+    priceForPreview,
   );
   const shortPreview = useOrderMarginPreview(
     previewAccount,
     market?.id ?? 0n,
     summary.short.sizeDelta,
-    Price(tabPrice),
+    priceForPreview,
   );
   // R0 — требование аккаунта до ордера. Есть только с данными: загрузка и
   // ошибка дают `undefined`, а не 0n.
