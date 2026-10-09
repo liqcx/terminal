@@ -161,7 +161,7 @@ describe("rowsView stale", () => {
 });
 
 describe("holdPreviewStep", () => {
-  const KEY = "1:200:1000";
+  const KEY = "1:200:base:1";
   const R1 = usd("3500");
   const LIQ = Price.parse("66750");
   const landed = { r1: R1, liq: LIQ };
@@ -193,19 +193,19 @@ describe("holdPreviewStep", () => {
   });
 
   it("сменился размер — прочерк и удержанное сброшено", () => {
-    const step = holdPreviewStep(held, "1:200:2000", unread, true);
+    const step = holdPreviewStep(held, "1:200:base:2", unread, true);
     expect(step.shown).toEqual({ r1: undefined, liq: undefined, stale: false });
     expect(step.held).toBeUndefined();
   });
 
   it("сменился рынок — прочерк и удержанное сброшено", () => {
-    const step = holdPreviewStep(held, "1:201:1000", unread, true);
+    const step = holdPreviewStep(held, "1:201:base:1", unread, true);
     expect(step.shown).toEqual({ r1: undefined, liq: undefined, stale: false });
     expect(step.held).toBeUndefined();
   });
 
   it("сменился аккаунт — прочерк и удержанное сброшено", () => {
-    const step = holdPreviewStep(held, "2:200:1000", unread, true);
+    const step = holdPreviewStep(held, "2:200:base:1", unread, true);
     expect(step.shown.r1).toBeUndefined();
     expect(step.held).toBeUndefined();
   });

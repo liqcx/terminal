@@ -184,11 +184,13 @@ export function useOrderSizing(params: {
   // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
   // смены размера, рынка или аккаунта прежнее значение не доживает до новой
   // строки. Одна только цена (марк) двигается без прочерка: цифры стороны
-  // удерживаются, пока читается тот же аккаунт, рынок и размер.
-  const sideKey = (sizeDelta: bigint) =>
-    `${previewAccount ?? ""}:${market?.id ?? ""}:${sizeDelta}`;
+  // удерживаются, пока читается тот же аккаунт, рынок и введённый размер.
+  // Ключ держится на намерении пользователя (единица + строка), а не на
+  // выведенном `sizeDelta`: в USD размер пересчитывается из марка, и каждый
+  // его сдвиг менял бы ключ и гасил цифры. Запрос при этом спрашивает `sizeDelta`.
+  const heldKey = `${previewAccount ?? ""}:${market?.id ?? ""}:${unit}:${sizeStr}`;
   const long = useHeldPreview(
-    sideKey(summary.long.sizeDelta),
+    heldKey,
     {
       r1: longPreview.data?.requiredMargin,
       liq: longPreview.data?.estimatedLiquidationPrice,
@@ -196,7 +198,7 @@ export function useOrderSizing(params: {
     longPreview.isLoading,
   );
   const short = useHeldPreview(
-    sideKey(summary.short.sizeDelta),
+    heldKey,
     {
       r1: shortPreview.data?.requiredMargin,
       liq: shortPreview.data?.estimatedLiquidationPrice,

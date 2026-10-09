@@ -55,9 +55,14 @@ test.describe("positions", () => {
       "Req. margin",
     );
 
+    // Меню колонок называет её так же, а не id (подпись из `labels`).
+    await userInfo.columnsButton.click();
+    await expect(userInfo.columnsMenu).toContainText("Req. margin");
+
+    await page.keyboard.press("Escape");
     await header.getByTestId("positions-req-margin-header").hover();
     await expect(page.getByRole("tooltip").first()).toHaveText(
-      "Initial margin the protocol requires for this position — a size- and skew-dependent share plus the liquidation reward",
+      "Initial margin the protocol requires for this position alone — grows with position size; the account-level liquidation reward is not included",
     );
 
     // Плечо позиции (TRM-12: notional / available аккаунта) не показывается:

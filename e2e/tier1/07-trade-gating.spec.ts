@@ -323,8 +323,7 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.orderLiqPrice).toHaveText("66,750 / 73,250");
     await page.clock.runFor(MARK_DEBOUNCE_MS + 500);
 
-    // Новый марк: превью читается по новой цене и парковано на барьере — это
-    // и есть круг RPC, на котором строки раньше становились «—».
+    // Новый марк: превью читается по новой цене и парковано на барьере.
     armHold(world, "orderMarginRead");
     world.priceByMarket[MARKET.id] = 71_000n * WAD;
     await page.clock.runFor(5_000 + MARK_DEBOUNCE_MS + 500);
@@ -340,6 +339,31 @@ test.describe("trade form gating & controls", () => {
     // Мок считает R1 по цене чтения: 5% · $71 000 = $3 550.
     await expect(trade.orderMargin).toHaveText("$3,550.00 / $3,550.00");
     expect(world.orderMarginCalls.map((c) => c.price)).toContain(71_000n * WAD);
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
+  });
+
+  test("размер в USD: сдвиг марка пересчитывает количество, но цифры удержаны", async ({
+    page,
+    world,
+  }) => {
+    await page.clock.install();
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.setSizeUnit("usd");
+    await trade.setSize("70000");
+    // $70 000 при марке $70 000 — 1 BTC: R1 = $3 500.
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+    await page.clock.runFor(MARK_DEBOUNCE_MS + 500);
+
+    // Марк сдвинулся — количество из тех же $70 000 стало другим, а введённое
+    // пользователем не менялось: цифры остаются, пока читается новая цена.
+    armHold(world, "orderMarginRead");
+    world.priceByMarket[MARKET.id] = 71_000n * WAD;
+    await page.clock.runFor(5_000 + MARK_DEBOUNCE_MS + 500);
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(2);
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+
+    releaseHold(world, "orderMarginRead");
     await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
   });
 

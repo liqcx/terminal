@@ -45,7 +45,7 @@ const COLUMN_LABELS = { margin: "Req. margin" };
 
 /** Что значит число в колонке — для подсказки заголовка. */
 const REQ_MARGIN_NOTE =
-  "Initial margin the protocol requires for this position — a size- and skew-dependent share plus the liquidation reward";
+  "Initial margin the protocol requires for this position alone — grows with position size; the account-level liquidation reward is not included";
 
 /**
  * Заголовок колонки с подсказкой. Провайдер свой: таблица стоит вне
