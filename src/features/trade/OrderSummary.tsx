@@ -34,28 +34,44 @@ export function OrderSummary({
     >
       <Row label="Order qty." value={formatQty(summary.qty)} unit={baseSymbol} testid="order-qty" />
       <Row label="Order value" value={formatUsd(summary.value)} unit={quoteSymbol} testid="order-value" />
-      <SidesRow label="Margin" sides={rows.margin} testid="order-margin" />
-      <SidesRow label="Liq. Price" sides={rows.liqPrice} testid="order-liq-price" />
+      <SidesRow label="Margin" sides={rows.margin} stale={rows.stale} testid="order-margin" />
+      <SidesRow label="Liq. Price" sides={rows.liqPrice} stale={rows.stale} testid="order-liq-price" />
     </div>
   );
 }
 
+/** Цифры удержаны с прошлого чтения: у прочерка отдельного стиля нет, поэтому просто приглушаем. */
+const STALE = "opacity-50";
+
 function SidesRow({
   label,
   sides,
+  stale,
   testid,
 }: {
   label: string;
   sides: { long: string; short: string };
+  /** Сторона показывает удержанные цифры, пока читается новая цена. */
+  stale: { long: boolean; short: boolean };
   testid: string;
 }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted">{label}</span>
       <span data-testid={testid}>
-        <span className="text-long">{sides.long}</span>
+        <span
+          className={`text-long ${stale.long ? STALE : ""}`}
+          data-stale={stale.long ? "" : undefined}
+        >
+          {sides.long}
+        </span>
         <span className="text-muted"> / </span>
-        <span className="text-short">{sides.short}</span>
+        <span
+          className={`text-short ${stale.short ? STALE : ""}`}
+          data-stale={stale.short ? "" : undefined}
+        >
+          {sides.short}
+        </span>
       </span>
     </div>
   );

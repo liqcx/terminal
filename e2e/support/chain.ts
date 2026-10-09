@@ -78,6 +78,13 @@ export const GET_ACCOUNT_FULL_POSITION_INFO_SELECTOR = toFunctionSelector(
   ) as AbiFunction,
 );
 
+/** The preview read — the `orderMarginRead` hold parks it to keep a price-only re-read in flight. */
+export const REQUIRED_MARGIN_FOR_ORDER_SELECTOR = toFunctionSelector(
+  combinedAbi.find(
+    (i) => i.type === "function" && i.name === "requiredMarginForOrderWithPrice",
+  ) as AbiFunction,
+);
+
 function selectorOf(data: string): string {
   return data.slice(0, 10);
 }

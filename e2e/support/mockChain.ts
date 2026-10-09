@@ -10,6 +10,7 @@ import {
   handleEthCall,
   TOKEN_OF_OWNER_SELECTOR,
   GET_ACCOUNT_FULL_POSITION_INFO_SELECTOR,
+  REQUIRED_MARGIN_FOR_ORDER_SELECTOR,
   withdrawsCollateral,
 } from "./chain";
 import type { MockWorld } from "./world";
@@ -197,6 +198,12 @@ async function awaitHolds(world: MockWorld, msg: RpcMessage): Promise<void> {
       data.includes(GET_ACCOUNT_FULL_POSITION_INFO_SELECTOR.slice(2))
     ) {
       await world.holds.positionsRead.promise;
+    }
+    if (
+      world.holds.orderMarginRead &&
+      data.includes(REQUIRED_MARGIN_FOR_ORDER_SELECTOR.slice(2))
+    ) {
+      await world.holds.orderMarginRead.promise;
     }
   }
 }

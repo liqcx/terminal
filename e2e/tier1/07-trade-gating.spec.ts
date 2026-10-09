@@ -2,6 +2,11 @@ import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
 import { longPositionFixture, readyWorld } from "../support/world";
 import { MARKET, MARKET_ETH, WAD } from "../support/constants";
+import { armHold, releaseHold } from "../support/world";
+
+// Зеркало `MARK_DEBOUNCE_MS` из src/features/trade/orderMarginView.ts: e2e не
+// импортирует код приложения, поэтому при смене задержки там — менять и здесь.
+const MARK_DEBOUNCE_MS = 2_000;
 
 test.describe("trade form gating & controls", () => {
   test("submit is disabled until a size is entered", async ({ page, world }) => {
@@ -293,7 +298,7 @@ test.describe("trade form gating & controls", () => {
     await expect.poll(() => callsFor(MARKET.id).at(-1)?.price).toBe(btcMark);
     // Сглаженный марк BTC дошёл до 70 000: теперь он и есть тот, что устаревает
     // при смене рынка.
-    await page.clock.runFor(2_500);
+    await page.clock.runFor(MARK_DEBOUNCE_MS + 500);
 
     await market.pickMarket(MARKET_ETH.id);
     // Сглаженный марк догоняет через MARK_DEBOUNCE_MS; ждём, пока превью ETH
@@ -303,6 +308,58 @@ test.describe("trade form gating & controls", () => {
       .toBe(true);
     expect(callsFor(MARKET_ETH.id).length).toBeGreaterThan(0);
     expect(callsFor(MARKET_ETH.id).map((c) => c.price)).not.toContain(btcMark);
+  });
+
+  test("смена марка не гасит Margin и Liq. Price в прочерк: цифры удержаны, пока читается новая цена", async ({
+    page,
+    world,
+  }) => {
+    await page.clock.install();
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.setSize("1");
+    // R1 = 5% · 1 BTC · $70 000 = $3 500; ликвидация ±$3 250 от марка.
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+    await expect(trade.orderLiqPrice).toHaveText("66,750 / 73,250");
+    await page.clock.runFor(MARK_DEBOUNCE_MS + 500);
+
+    // Новый марк: превью читается по новой цене и парковано на барьере — это
+    // и есть круг RPC, на котором строки раньше становились «—».
+    armHold(world, "orderMarginRead");
+    world.priceByMarket[MARKET.id] = 71_000n * WAD;
+    await page.clock.runFor(5_000 + MARK_DEBOUNCE_MS + 500);
+
+    // Старые цифры на месте и приглушены (пометка есть только пока новое чтение
+    // в пути — она же и точка синхронизации); прочерков нет.
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(2);
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+    await expect(trade.orderLiqPrice).toHaveText("66,750 / 73,250");
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(2);
+
+    releaseHold(world, "orderMarginRead");
+    // Мок считает R1 по цене чтения: 5% · $71 000 = $3 550.
+    await expect(trade.orderMargin).toHaveText("$3,550.00 / $3,550.00");
+    expect(world.orderMarginCalls.map((c) => c.price)).toContain(71_000n * WAD);
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
+  });
+
+  test("смена размера при чтении превью — прочерк, а не цифры прошлого размера", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.setSize("1");
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+
+    armHold(world, "orderMarginRead");
+    await trade.setSize("0.5");
+    // Цифры $3 500 — для размера 1, а на экране 0.5: им тут не место.
+    await expect(trade.orderMargin).toHaveText("— / —");
+    await expect(trade.orderLiqPrice).toHaveText("— / —");
+
+    releaseHold(world, "orderMarginRead");
+    await expect(trade.orderMargin).toHaveText("$1,750.00 / $1,750.00");
   });
 
   test("в пределах free предупреждения нет", async ({ page, world }) => {

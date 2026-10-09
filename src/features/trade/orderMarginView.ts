@@ -51,12 +51,16 @@ export interface SideRow {
   lock: Margin | undefined;
   /** Оценка ликвидации превью; `null` — уровня нет, `undefined` — не прочитана. */
   liq: Price | null | undefined;
+  /** Цифры удержаны с прошлого чтения, новое ещё в пути ({@link holdPreviewStep}). */
+  stale?: boolean;
 }
 
 /** Две строки сводки, по строке на сторону. */
 export interface RowsView {
   margin: { long: string; short: string };
   liqPrice: { long: string; short: string };
+  /** Сторона показывает удержанные цифры и пересчитывается — строки приглушаются. */
+  stale: { long: boolean; short: boolean };
 }
 
 /** Строки «Margin» и «Liq. Price»: неизвестное — прочерк, `0n` — `$0.00`. */
@@ -73,6 +77,10 @@ export function rowsView(input: { long: SideRow; short: SideRow }): RowsView {
     liqPrice: {
       long: liq(input.long.liq),
       short: liq(input.short.liq),
+    },
+    stale: {
+      long: input.long.stale === true,
+      short: input.short.stale === true,
     },
   };
 }
@@ -130,4 +138,61 @@ export function previewPrice(input: {
 }): bigint {
   if (input.tab === "Limit") return input.limit;
   return input.debouncedMark > 0n ? input.debouncedMark : input.mark;
+}
+
+/** Что превью отдало по одной стороне; `undefined` — не прочитано. */
+export interface PreviewFigures {
+  /** R1 — требование всего аккаунта после ордера. */
+  r1: Margin | undefined;
+  /** Оценка ликвидации; `null` — уровня нет, `undefined` — не прочитана. */
+  liq: Price | null | undefined;
+}
+
+/** Последние прочитанные цифры стороны и ключ (аккаунт, рынок, размер), для которого они прочитаны. */
+export interface HeldFigures {
+  key: string;
+  r1: Margin;
+  liq: Price | null;
+}
+
+/** Что показывать: цифры и пометка, что они удержаны с прошлого чтения. */
+export interface ShownFigures extends PreviewFigures {
+  stale: boolean;
+}
+
+/**
+ * Удержание цифр, пока двигается одна только цена.
+ *
+ * @remarks У превью SDK нет `placeholderData`, а цена входит в ключ запроса:
+ * каждая смена марка — новый ключ, и строки на круг RPC становились бы «—».
+ * Пока читается тот же `key` (аккаунт, рынок, размер, сторона), показываются
+ * последние прочитанные цифры с пометкой `stale`. Другой ключ (сменился размер,
+ * рынок или аккаунт), упавшее чтение и выключенный запрос (`inFlight` ложно, а
+ * цифр нет) показывают `fresh` — «не прочитано»: чужая цифра под новым ордером
+ * соврала бы. Прочитанное `fresh` всегда выигрывает у удержанного.
+ *
+ * Возвращает следующее удержанное состояние (тот же объект, пока ничего не
+ * изменилось) и то, что показать.
+ */
+export function holdPreviewStep(
+  held: HeldFigures | undefined,
+  key: string,
+  fresh: PreviewFigures,
+  inFlight: boolean,
+): { held: HeldFigures | undefined; shown: ShownFigures } {
+  if (fresh.r1 !== undefined) {
+    const liq = fresh.liq ?? null;
+    const next =
+      held !== undefined &&
+      held.key === key &&
+      held.r1 === fresh.r1 &&
+      held.liq === liq
+        ? held
+        : { key, r1: fresh.r1, liq };
+    return { held: next, shown: { r1: fresh.r1, liq, stale: false } };
+  }
+  if (held !== undefined && held.key === key && inFlight) {
+    return { held, shown: { r1: held.r1, liq: held.liq, stale: true } };
+  }
+  return { held: undefined, shown: { ...fresh, stale: false } };
 }

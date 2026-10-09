@@ -2,6 +2,8 @@ import { Margin, Price, Usd } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
 import {
+  type HeldFigures,
+  holdPreviewStep,
   lockAmount,
   previewPrice,
   rowsView,
@@ -145,5 +147,88 @@ describe("settledMark", () => {
         held: { marketId: BTC, mark: 0n },
       }),
     ).toBe(70_000n);
+  });
+});
+
+describe("rowsView stale", () => {
+  it("пометка удержания идёт по сторонам и по умолчанию снята", () => {
+    const rows = rowsView({
+      long: { lock: usd("10"), liq: Price.parse("5"), stale: true },
+      short: { lock: usd("10"), liq: Price.parse("5") },
+    });
+    expect(rows.stale).toEqual({ long: true, short: false });
+  });
+});
+
+describe("holdPreviewStep", () => {
+  const KEY = "1:200:1000";
+  const R1 = usd("3500");
+  const LIQ = Price.parse("66750");
+  const landed = { r1: R1, liq: LIQ };
+  const unread = { r1: undefined, liq: undefined };
+  const held: HeldFigures = { key: KEY, r1: R1, liq: LIQ };
+
+  it("прочитано — показывает прочитанное и запоминает его", () => {
+    const step = holdPreviewStep(undefined, KEY, landed, false);
+    expect(step.shown).toEqual({ r1: R1, liq: LIQ, stale: false });
+    expect(step.held).toEqual(held);
+  });
+
+  it("прочитано то же самое — удержанное состояние то же по ссылке", () => {
+    const step = holdPreviewStep(held, KEY, landed, false);
+    expect(step.held).toBe(held);
+  });
+
+  it("тот же ключ, чтение в пути (сдвинулась цена) — удерживает цифры, помечая их", () => {
+    const step = holdPreviewStep(held, KEY, unread, true);
+    expect(step.shown).toEqual({ r1: R1, liq: LIQ, stale: true });
+    expect(step.held).toBe(held);
+  });
+
+  it("новое чтение по тому же ключу перебивает удержанное", () => {
+    const next = { r1: usd("3550"), liq: Price.parse("66800") };
+    const step = holdPreviewStep(held, KEY, next, false);
+    expect(step.shown).toEqual({ r1: next.r1, liq: next.liq, stale: false });
+    expect(step.held).toEqual({ key: KEY, r1: next.r1, liq: next.liq });
+  });
+
+  it("сменился размер — прочерк и удержанное сброшено", () => {
+    const step = holdPreviewStep(held, "1:200:2000", unread, true);
+    expect(step.shown).toEqual({ r1: undefined, liq: undefined, stale: false });
+    expect(step.held).toBeUndefined();
+  });
+
+  it("сменился рынок — прочерк и удержанное сброшено", () => {
+    const step = holdPreviewStep(held, "1:201:1000", unread, true);
+    expect(step.shown).toEqual({ r1: undefined, liq: undefined, stale: false });
+    expect(step.held).toBeUndefined();
+  });
+
+  it("сменился аккаунт — прочерк и удержанное сброшено", () => {
+    const step = holdPreviewStep(held, "2:200:1000", unread, true);
+    expect(step.shown.r1).toBeUndefined();
+    expect(step.held).toBeUndefined();
+  });
+
+  it("чтение упало (не в пути, цифр нет) — прочерк и удержанное сброшено", () => {
+    const step = holdPreviewStep(held, KEY, unread, false);
+    expect(step.shown).toEqual({ r1: undefined, liq: undefined, stale: false });
+    expect(step.held).toBeUndefined();
+  });
+
+  it("запрос выключен — тот же результат: прочерк, а не старые цифры", () => {
+    // Выключенный запрос для хука неотличим от упавшего: данных нет, в пути нет.
+    const step = holdPreviewStep(held, "", unread, false);
+    expect(step.shown.stale).toBe(false);
+    expect(step.held).toBeUndefined();
+  });
+
+  it("«уровня ликвидации нет» (null) остаётся null, а не «не прочитано»", () => {
+    const withNull = { r1: R1, liq: null };
+    const step = holdPreviewStep(undefined, KEY, withNull, false);
+    expect(step.shown.liq).toBeNull();
+    const heldNull = step.held;
+    const held2 = holdPreviewStep(heldNull, KEY, unread, true);
+    expect(held2.shown).toEqual({ r1: R1, liq: null, stale: true });
   });
 });

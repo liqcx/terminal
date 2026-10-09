@@ -32,6 +32,7 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
+import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
 
 export type SizeUnit = "base" | "usd";
@@ -180,18 +181,36 @@ export function useOrderSizing(params: {
   const { data: usage } = useMarginUsage(accountId);
   const r0 = usage?.requiredInitialMargin;
   // R1 — требование всего аккаунта после ордера. `data` есть только у
-  // прочитанного превью; ключ запроса несёт размер и цену, поэтому после их
-  // смены прежнее значение не доживает до новой строки.
-  const r1Long = longPreview.data?.requiredMargin;
-  const r1Short = shortPreview.data?.requiredMargin;
-  const rows = rowsView({
-    long: {
-      lock: lockAmount({ r1: r1Long, r0 }),
+  // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
+  // смены размера, рынка или аккаунта прежнее значение не доживает до новой
+  // строки. Одна только цена (марк) двигается без прочерка: цифры стороны
+  // удерживаются, пока читается тот же аккаунт, рынок и размер.
+  const sideKey = (sizeDelta: bigint) =>
+    `${previewAccount ?? ""}:${market?.id ?? ""}:${sizeDelta}`;
+  const long = useHeldPreview(
+    sideKey(summary.long.sizeDelta),
+    {
+      r1: longPreview.data?.requiredMargin,
       liq: longPreview.data?.estimatedLiquidationPrice,
     },
+    longPreview.isLoading,
+  );
+  const short = useHeldPreview(
+    sideKey(summary.short.sizeDelta),
+    {
+      r1: shortPreview.data?.requiredMargin,
+      liq: shortPreview.data?.estimatedLiquidationPrice,
+    },
+    shortPreview.isLoading,
+  );
+  const r1Long = long.r1;
+  const r1Short = short.r1;
+  const rows = rowsView({
+    long: { lock: lockAmount({ r1: r1Long, r0 }), liq: long.liq, stale: long.stale },
     short: {
       lock: lockAmount({ r1: r1Short, r0 }),
-      liq: shortPreview.data?.estimatedLiquidationPrice,
+      liq: short.liq,
+      stale: short.stale,
     },
   });
 
@@ -209,7 +228,8 @@ export function useOrderSizing(params: {
     // после ордера), поэтому с `free` сверяется R1, а не `max(0, R1 − R0)`,
     // которую шлюз блокирует: разница меньше R1 и пропустила бы ордера,
     // которые шлюз откажет. Сторон две, предупреждение одно — судит большее
-    // из прочитанных R1, то есть сторона, наращивающая экспозицию.
+    // из прочитанных R1, то есть сторона, наращивающая экспозицию. Удержанное
+    // R1 тоже годится: предупреждение мягкое и submit не блокирует.
     // `undefined` у любой из величин значит «не знаем»: предупреждения нет.
     requiredMargin: warnRequirement(r1Long, r1Short),
     free: free === undefined ? undefined : Margin(free),
