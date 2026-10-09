@@ -442,6 +442,7 @@ export async function mockGateway(page: Page, world: MockWorld): Promise<void> {
     // --- accounts ----------------------------------------------------------
     const margin = path.match(/\/accounts\/([^/]+)\/margin$/);
     if (margin) {
+      if (await faulted(route, world, "margin")) return;
       await send(route, {
         accountId: margin[1],
         ...world.accountMargin,

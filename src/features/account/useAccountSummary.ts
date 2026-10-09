@@ -22,8 +22,8 @@ interface SummaryInput {
   available: bigint | undefined;
   /** `useMarginUsage().data.usage`, WAD; `undefined` — нет чтения или счёт под водой. */
   usage?: bigint;
-  /** Офчейн-лок под неурегулированные филлы. */
-  locked: bigint;
+  /** Офчейн-лок под неурегулированные филлы. `undefined` = шлюз не прочитан (нет входа, загрузка, ошибка). */
+  locked: bigint | undefined;
   /** `free` шлюза = `available − locked`; может быть отрицательным. */
   free?: bigint;
   debt: bigint;
@@ -36,7 +36,7 @@ interface AccountSummary {
   /** Решение 3 (TRM-40): equity = available. Офчейн-лок не вычитается. */
   equity: bigint | undefined;
   /** Офчейн-лок под открытые ордера — отдельной строкой «In orders». */
-  inOrders: bigint;
+  inOrders: bigint | undefined;
   borrowed: bigint;
   exposure: bigint;
   /** WAD-кратность. `undefined`, когда стоимость счёта неизвестна или неположительна. */
@@ -48,7 +48,7 @@ interface AccountSummary {
 }
 
 /**
- * Восемь чисел панели из четырёх чтений.
+ * Девять полей панели из пяти чтений (available, позиции, маржа шлюза, usage, долг).
  *
  * @remarks Чистая функция — вся её работа складывать и делить уже посчитанное:
  * `unrealizedPnl` и `notional` приходят из `enrichPosition`, `available` из
@@ -83,11 +83,13 @@ export function summarize(input: SummaryInput): AccountSummary {
 }
 
 /**
- * Панель Account поверх четырёх чтений SDK.
+ * Панель Account поверх пяти чтений SDK.
  *
  * @remarks Маржа шлюза — `useAccountMargin`, использование —
- * `useMarginUsage`: те же записи кэша, что у тикета, и SDK сам сбрасывает их
- * на `orderStateChanged` и прочих событиях.
+ * `useMarginUsage`: те же записи кэша, что у тикета. SDK помечает устаревшей
+ * маржу шлюза на `orderStateChanged` и прочих событиях ордеров, а usage — на
+ * orderSubmitted / orderCancelled / orderSettled и deposited / repaid /
+ * withdrawn.
  *
  * Долг с SDK 0.56.0 читает `useAccountDebtQuery` — одна запись кэша на панель,
  * диалог вывода и протухание после расчёта или погашения.
@@ -111,7 +113,7 @@ export function useAccountSummary(): {
     summary: summarize({
       available: margins?.available,
       usage: marginUsage?.usage,
-      locked: gatewayMargin?.locked ?? 0n,
+      locked: gatewayMargin?.locked,
       free: gatewayMargin?.free,
       debt: debt ?? 0n,
       positions: positions.map((p) => ({

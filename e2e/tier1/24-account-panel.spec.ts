@@ -45,6 +45,19 @@ test.describe("панель Account", () => {
     await expect(account.row("in-orders")).toHaveText("$40.00");
   });
 
+  test("шлюз маржи недоступен — «In orders» «—», не $0.00; equity остаётся", async ({
+    page,
+    world,
+  }) => {
+    await enterTerminal(page, world, () =>
+      readyWorld({ faults: { routeStatus: { margin: 500 } } }),
+    );
+    const account = new AccountPanelPage(page);
+
+    await expect(account.row("equity")).toHaveText("$5,000.00");
+    await expect(account.row("in-orders")).toHaveText("—");
+  });
+
   test("экспозиция и нереализованный PnL считаются по открытым позициям", async ({
     page,
     world,

@@ -100,4 +100,15 @@ describe("свод счёта", () => {
       }).marginUsage,
     ).toBeUndefined();
   });
+
+  it("лок шлюза не прочитан — inOrders неизвестен, а не $0", () => {
+    const s = summarize({
+      available: 1000n * WAD,
+      locked: undefined,
+      debt: 0n,
+      positions: [],
+    });
+    expect(s.inOrders).toBeUndefined();
+    expect(s.equity).toBe(1000n * WAD);
+  });
 });

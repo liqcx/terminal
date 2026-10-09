@@ -191,6 +191,7 @@ export type FaultRoute =
   | "candles"
   | "cancel"
   | "funding"
+  | "margin"
   | "markets"
   | "orderbook"
   | "orders"
@@ -283,7 +284,7 @@ export interface MockWorld {
   /** Закрытые эпизоды; `available: false` = индексатор молчит про счёт. */
   positionHistory: { available: boolean; episodes: WirePositionEpisode[] };
   settlementLedger: WireLedgerRow[];
-  /** `GET /accounts/:id/margin` — офчейн-лок питает строку Equity панели. */
+  /** `GET /accounts/:id/margin` — офчейн-лок питает строку «In orders» панели (Equity = available, лок не вычитает). */
   accountMargin: { available: string; locked: string; free: string };
   /** `GET /accounts/:id/portfolio` — кривая, lifetime-сводка, депозиты/выводы. */
   portfolio: WirePortfolio;

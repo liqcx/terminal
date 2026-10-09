@@ -37,7 +37,9 @@ export function AccountPanel() {
         <Row
           label="In orders"
           testid="account-in-orders"
-          value={formatUsd(summary.inOrders)}
+          value={
+            summary.inOrders === undefined ? DASH : formatUsd(summary.inOrders)
+          }
         />
         <Row
           label="Borrowed"
