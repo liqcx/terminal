@@ -276,6 +276,9 @@ test.describe("trade form gating & controls", () => {
     page,
     world,
   }) => {
+    // Часы подменены до загрузки: задержку марка в 2 с прокручиваем руками, а
+    // не ждём настенных часов.
+    await page.clock.install();
     const { trade, market } = await enterTerminal(page, world, () => {
       const w = readyWorld({ markets: [MARKET, MARKET_ETH] });
       w.priceByMarket[MARKET_ETH.id] = 2_000n * WAD;
@@ -288,6 +291,9 @@ test.describe("trade form gating & controls", () => {
 
     await trade.setSize("1");
     await expect.poll(() => callsFor(MARKET.id).at(-1)?.price).toBe(btcMark);
+    // Сглаженный марк BTC дошёл до 70 000: теперь он и есть тот, что устаревает
+    // при смене рынка.
+    await page.clock.runFor(2_500);
 
     await market.pickMarket(MARKET_ETH.id);
     // Сглаженный марк догоняет через MARK_DEBOUNCE_MS; ждём, пока превью ETH
