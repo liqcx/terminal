@@ -14,6 +14,12 @@ describe("deploy-env init", () => {
     await import("../deploy-env-init");
     const { getChainConfig } = await import("@liq/sdk");
     expect(getChainConfig(6343).susdcMarketId).toBe(1);
+    expect(getChainConfig(6343).contracts.PerpsMarketProxy).toBe(
+      "0xCf8e93CE16C59A1117c44113492F42b09e7081bc",
+    );
+    expect(getChainConfig(6343).contracts.PerpsMarketProxy).not.toBe(
+      "0xb6318e9453DEBEB7bCed3Ea1AC9aD5a8234236ca",
+    );
   });
 
   it("VITE_DEPLOY_ENV=production → SDK resolves the prod deploy (new contour, PerpsMarketProxy 0xb631…)", async () => {
@@ -35,5 +41,11 @@ describe("deploy-env init", () => {
     await import("../deploy-env-init");
     const { getChainConfig } = await import("@liq/sdk");
     expect(getChainConfig(6343).susdcMarketId).toBe(1);
+    expect(getChainConfig(6343).contracts.PerpsMarketProxy).toBe(
+      "0xCf8e93CE16C59A1117c44113492F42b09e7081bc",
+    );
+    expect(getChainConfig(6343).contracts.PerpsMarketProxy).not.toBe(
+      "0xb6318e9453DEBEB7bCed3Ea1AC9aD5a8234236ca",
+    );
   });
 });

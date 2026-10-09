@@ -122,6 +122,8 @@ export function TradeForm() {
     [],
   );
 
+  // MR-100: plumbing for the order margin preview; `free` has no effect until
+  // `requiredMargin` is wired into validateOrder.
   const { data: gatewayMargin } = useAccountMargin(accountId);
   const sizing = useOrderSizing({
     market,
