@@ -89,9 +89,11 @@ function parseSizeInput(
 export function useOrderSizing(params: {
   market: MarketSummary | undefined;
   available: bigint;
+  /** Шлюзовой `free` (`available − locked`, знаковый); `undefined` — не прочитан. */
+  free: bigint | undefined;
   markPrice: bigint;
 }): OrderSizing {
-  const { market, available, markPrice } = params;
+  const { market, available, free, markPrice } = params;
 
   const [sizeStr, setSizeStrRaw] = useState("");
   const [unit, setUnitRaw] = useState<SizeUnit>("base");
@@ -144,8 +146,13 @@ export function useOrderSizing(params: {
     // им остаются шлюз и цепочка. Отказ по выдуманному числу отверг бы
     // ордера, которые протокол принял бы.
     maxLeverage: maxLeverage ?? Number.POSITIVE_INFINITY,
-    available: Margin(available),
-    marginCost: margin,
+    // Предупреждение `exceeds-available-margin` с 0.67.0 срабатывает, только
+    // когда известны обе стороны. `free` — `available − locked` со шлюза.
+    // `requiredMargin` — превью шлюза (`useOrderMarginPreview`), в тикете его
+    // пока нет: `undefined` значит «не знаем», предупреждения нет. Локальную
+    // оценку `margin` сюда не подставляем — она не то, с чем шлюз сверяет free.
+    requiredMargin: undefined,
+    free: free === undefined ? undefined : Margin(free),
   });
 
   function fmtForUnit(sizeWad: bigint, u: SizeUnit): string {

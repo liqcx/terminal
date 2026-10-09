@@ -13,6 +13,7 @@ import {
 } from "@liq/sdk";
 import {
   useAccountId,
+  useAccountMargin,
   useApplyBracketsMutation,
   useAvailableMarginQuery,
   useConditionalOrders,
@@ -121,9 +122,11 @@ export function TradeForm() {
     [],
   );
 
+  const { data: gatewayMargin } = useAccountMargin(accountId);
   const sizing = useOrderSizing({
     market,
     available: margins?.available ?? 0n,
+    free: gatewayMargin?.free,
     markPrice,
   });
   // Пока SDK подаёт ноги, тикет ещё занят: `submitOrder.isPending` гаснет на
