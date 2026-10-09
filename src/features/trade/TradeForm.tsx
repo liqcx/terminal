@@ -122,14 +122,19 @@ export function TradeForm() {
     [],
   );
 
-  // MR-100: plumbing for the order margin preview; `free` has no effect until
-  // `requiredMargin` is wired into validateOrder.
+  // The active tab's price field, parsed (0n = blank/unparseable). Market —
+  // марк, Limit — введённая цена: по ней превью контракта считает комиссию, а
+  // `tabPriceReady` держит submit закрытым, пока у лимитки цены нет.
+  const tabPrice =
+    tab === "Market" ? markPrice : parseOrZero(Price.parse, limitPrice);
   const { data: gatewayMargin } = useAccountMargin(accountId);
   const sizing = useOrderSizing({
     market,
+    accountId,
     available: margins?.available ?? 0n,
     free: gatewayMargin?.free,
     markPrice,
+    tabPrice,
   });
   // Пока SDK подаёт ноги, тикет ещё занят: `submitOrder.isPending` гаснет на
   // принятом входе, а скобки уходят после него. Без этого второй вход в то же
@@ -139,12 +144,7 @@ export function TradeForm() {
   const error = submitOrder.error ?? applyBrackets.error;
   const insufficientMargin = !margins || margins.available === 0n;
 
-  // The active tab's price field, parsed (0n = blank/unparseable).
-  function parsedTabPrice(): bigint {
-    if (tab === "Market") return markPrice;
-    return parseOrZero(Price.parse, limitPrice);
-  }
-  const tabPriceReady = parsedTabPrice() > 0n;
+  const tabPriceReady = tabPrice > 0n;
 
   const openPosition = positions.find((p) => p.marketId === marketId);
   /**
@@ -157,7 +157,7 @@ export function TradeForm() {
    */
   const entryPrice =
     tab === "Limit" && openPosition === undefined
-      ? Price(parsedTabPrice())
+      ? Price(tabPrice)
       : undefined;
 
   const tpPrice = Price(parseOrZero(Price.parse, tp));
@@ -323,7 +323,7 @@ export function TradeForm() {
       return;
     }
 
-    const price = parsedTabPrice();
+    const price = tabPrice;
     if (price <= 0n) return;
 
     // `acceptablePrice` у лимитного черновика нет: подписанное сообщение
@@ -446,6 +446,7 @@ export function TradeForm() {
       <div className="flex shrink-0 flex-col gap-1.5 border-t border-border p-2.5">
         <OrderSummary
           summary={sizing.summary}
+          rows={sizing.rows}
           baseSymbol={sizing.baseSymbol}
           quoteSymbol="USD"
         />

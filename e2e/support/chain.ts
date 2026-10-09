@@ -202,7 +202,42 @@ function computeRead(
     // ratio()/leverageFor()/liquidationPriceFor() all guard the zero case
     // (see @liqpro/liq-core's accountMargin) rather than dividing by it.
     case "getRequiredMargins": {
-      return [0n, 0n, 0n];
+      const account = findAccount(world, args[0] as bigint);
+      return [account?.requiredInitialMargin ?? 0n, 0n, 0n];
+    }
+    // Превью ордера (`getOrderMarginPreview` в @liqpro/liq-onchain 0.67): одна
+    // мультиколла из шести чтений — requiredMarginForOrderWithPrice,
+    // getAvailableMargin, getRequiredMargins, getAccountFullPositionInfo (все
+    // четыре выше или ниже по списку), getLiquidationParameters и
+    // getFundingParameters. Падение первого — ошибка превью, остальных — только
+    // «уровня ликвидации нет», поэтому мок отвечает всеми шестью.
+    //
+    // R1 = R0 + (|размер после| − |размер до|) · indexPrice · доля — требование
+    // всего аккаунта после ордера; по сокращающему ордеру оно падает, и
+    // шлюз блокирует `max(0, R1 − R0)`.
+    case "requiredMarginForOrderWithPrice": {
+      world.orderMarginReads += 1;
+      if (world.faults.orderMarginFails) throw new Error("preview reverts");
+      const account = findAccount(world, args[0] as bigint);
+      const delta = args[2] as bigint;
+      const held =
+        account?.positions.find((p) => p.marketId === String(args[1]))
+          ?.positionSize ?? 0n;
+      const absOf = (n: bigint) => (n < 0n ? -n : n);
+      const grown = absOf(held + delta) - absOf(held);
+      const required =
+        (account?.requiredInitialMargin ?? 0n) +
+        (grown * world.indexPrice * world.orderMarginRatio) / (WAD * WAD);
+      return [required > 0n ? required : 0n];
+    }
+    // initialMarginRatio 0 и скью-масштаб 0 — доля не зависит от размера:
+    // начальная = `orderMarginRatio`, поддержка = половина её. Награда
+    // ликвидатора и минимум позиции — ноль.
+    case "getLiquidationParameters": {
+      return [0n, world.orderMarginRatio, WAD / 2n, 0n, 0n];
+    }
+    case "getFundingParameters": {
+      return [0n, 0n];
     }
     case "getOpenPosition": {
       const account = findAccount(world, args[0] as bigint);

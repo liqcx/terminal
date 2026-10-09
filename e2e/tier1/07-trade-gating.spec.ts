@@ -1,6 +1,7 @@
 import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
-import { readyWorld } from "../support/world";
+import { longPositionFixture, readyWorld } from "../support/world";
+import { WAD } from "../support/constants";
 
 test.describe("trade form gating & controls", () => {
   test("submit is disabled until a size is entered", async ({ page, world }) => {
@@ -137,20 +138,79 @@ test.describe("trade form gating & controls", () => {
     );
   });
 
-  test("сводка называет обе стороны, а ликвидации у них разные", async ({
+  test("сводка называет обе стороны: Margin и Liq. Price — из превью контракта", async ({
     page,
     world,
   }) => {
     const { trade } = await enterTerminal(page, world);
 
     await trade.setSize("1");
-    // Размер 1 BTC при марке $70 000 и плече 2 — стоимость $35 000; поддержка
-    // 0,5% рынка мока даёт требование $350, то есть запас $34 650 в обе
-    // стороны от марка.
+    // Мок превью: начальная маржа 5% от объёма, поддержка — половина её.
+    // 1 BTC при марке $70 000: R1 = $3 500 при R0 = 0, то есть шлюз заблокирует
+    // $3 500 под любую сторону. Требование поддержки $1 750 против available
+    // $5 000 даёт запас $3 250 в обе стороны от марка. Плечо тикета (по
+    // умолчанию 2×) в этих числах не участвует — оно только калькулятор размера.
     await expect(trade.orderQty).toContainText("1 BTC");
     await expect(trade.orderValue).toContainText("$70,000.00 USD");
-    await expect(trade.orderCost).toContainText("$35,000.00 USD");
-    await expect(trade.orderLiqPrice).toHaveText("35,350 / 104,650");
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+    await expect(trade.orderLiqPrice).toHaveText("66,750 / 73,250");
+  });
+
+  test("Margin — разница R1 − R0: у сокращающей стороны $0.00", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      // Лонг 1 BTC: R0 = 5% · $70 000 = $3 500.
+      w.accounts[0].positions = [longPositionFixture()];
+      w.accounts[0].requiredInitialMargin = 3_500n * WAD;
+      return w;
+    });
+
+    await trade.setSize("0.5");
+    // Лонг наращивает: R1 = 3 500 + 1 750 = 5 250, блокировка 1 750.
+    // Шорт сокращает: R1 = 3 500 − 1 750 = 1 750 ≤ R0, блокировка 0n, а не
+    // отрицательная и не прочерк.
+    await expect(trade.orderMargin).toHaveText("$1,750.00 / $0.00");
+  });
+
+  test("превью не прочитано — Margin и Liq. Price прочерки, предупреждения нет", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.faults.orderMarginFails = true;
+      return w;
+    });
+
+    await trade.setSize("1");
+    // Прочерк стоит и до ответа, поэтому сначала дожидаемся, что превью
+    // спросили (и мок отказал), и только потом проверяем экран.
+    await expect.poll(() => world.orderMarginReads).toBeGreaterThan(0);
+    await expect(trade.orderMargin).toHaveText("— / —");
+    await expect(trade.orderLiqPrice).toHaveText("— / —");
+    await expect(trade.orderWarning).toHaveCount(0);
+    await expect(trade.submitButton).toBeEnabled();
+  });
+
+  test("лимитка без цены не просит превью и не подаётся; с ценой — считается", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.selectTab("limit");
+    await trade.setSize("1");
+    await expect(trade.orderMargin).toHaveText("— / —");
+    await expect(trade.orderLiqPrice).toHaveText("— / —");
+    await expect(trade.submitButton).toBeDisabled();
+    expect(world.orderMarginReads).toBe(0);
+
+    await trade.setLimitPrice("70000");
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+    await expect(trade.submitButton).toBeEnabled();
   });
 
   test("сводка стоит на месте и до размера — пустая, а не спрятанная", async ({
@@ -163,6 +223,7 @@ test.describe("trade form gating & controls", () => {
     // появляясь только с размером, она прятала бы это до самого решения.
     await expect(trade.orderSummary).toBeVisible();
     await expect(trade.orderQty).toHaveText(/^0 /);
+    await expect(trade.orderMargin).toHaveText("— / —");
     await expect(trade.orderLiqPrice).toHaveText("— / —");
   });
 
@@ -182,19 +243,36 @@ test.describe("trade form gating & controls", () => {
     await expect(page.getByTestId("leverage-option-50")).toHaveCount(0);
   });
 
-  test("a size beyond buying power does not block submit (warning waits for MR-100)", async ({
+  test("сверх free шлюза — предупреждение по R1, а не по блокировке; submit открыт", async ({
     page,
     world,
   }) => {
-    const { trade } = await enterTerminal(page, world);
-    // default leverage 2, buying power ≈ 0.1428 BTC; 1 BTC needs ~7x the margin.
-    // SDK 0.67.0: `exceeds-available-margin` fires only when both the order's
-    // `requiredMargin` (order margin preview) and the gateway `free` are known.
-    // The ticket does not read the preview yet (MR-100), so there is no client
-    // warning — but the order is still never blocked: the gateway/chain stay
-    // the authority. Restore the "Exceeds available margin" assertion when the
-    // preview is wired.
-    await trade.setSize("1");
+    const { trade } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      // free гейтвея 5 000, R0 = 3 000: ордер на 1.2 BTC даёт R1 = 3 000 +
+      // 4 200 = 7 200 > free, а блокировка R1 − R0 = 4 200 ≤ free. Шлюз
+      // допускает ордер при free ≥ R1, поэтому отклонит его — и предупреждение
+      // обязано сверять free именно с R1, не с блокировкой.
+      w.accounts[0].requiredInitialMargin = 3_000n * WAD;
+      return w;
+    });
+    await trade.setSize("1.2");
+    await expect(trade.orderMargin).toHaveText("$4,200.00 / $4,200.00");
+    await expect(trade.orderWarning).toHaveText("Exceeds available margin");
+    // Предупреждение — не блок: шлюз и цепочка остаются судьёй.
+    await expect(trade.submitButton).toBeEnabled();
+  });
+
+  test("в пределах free предупреждения нет", async ({ page, world }) => {
+    const { trade } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].requiredInitialMargin = 3_000n * WAD;
+      return w;
+    });
+    // R1 = 3 000 + 1 750 = 4 750 ≤ free 5 000. Сначала ждём число — иначе
+    // «предупреждения нет» проходило бы и до ответа превью.
+    await trade.setSize("0.5");
+    await expect(trade.orderMargin).toHaveText("$1,750.00 / $1,750.00");
     await expect(trade.orderWarning).toHaveCount(0);
     await expect(trade.submitButton).toBeEnabled();
   });
