@@ -1,5 +1,6 @@
 import { AccountPage } from "../pages/AccountPage";
 import { enterTerminal } from "../pages/flows";
+import { WAD } from "../support/constants";
 import { expect, test } from "../support/fixtures";
 import {
   defaultPortfolio,
@@ -39,6 +40,40 @@ test.describe("страница Account", () => {
     await expect(account.todayPnl).toHaveText("+$120.00 (+2.40%)");
     await expect(account.activityRows.first()).toContainText("Deposit");
     await expect(account.activityRows.first()).toContainText("+$2,500.00");
+  });
+
+  test("Portfolio: использование маржи = требование / available (20.0%)", async ({
+    page,
+    world,
+  }) => {
+    await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].requiredInitialMargin = 1_000n * WAD;
+      return w;
+    });
+    const account = new AccountPage(page);
+    await account.open();
+    await account.tab("portfolio").click();
+
+    // getRequiredMargins[0] = 1 000, getAvailableMargin = 5 000.
+    await expect(page.getByTestId("portfolio-margin-usage")).toHaveText("20.0%");
+  });
+
+  test("Portfolio: счёт под водой — использование «—», не 0 % и не 100 %", async ({
+    page,
+    world,
+  }) => {
+    await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].available = -10n * WAD;
+      w.accounts[0].requiredInitialMargin = 1_000n * WAD;
+      return w;
+    });
+    const account = new AccountPage(page);
+    await account.open();
+    await account.tab("portfolio").click();
+
+    await expect(page.getByTestId("portfolio-margin-usage")).toHaveText("—");
   });
 
   test("Assets: строка USDC показывает остаток на аккаунте", async ({

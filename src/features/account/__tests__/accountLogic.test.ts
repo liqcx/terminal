@@ -9,7 +9,7 @@ import {
   activityCsv,
   activityRows,
   filterActivity,
-  marginUsage,
+  fmtUsageWad,
   periodWindow,
   pnlSeries,
   pnlShare,
@@ -105,16 +105,14 @@ describe("PnL окна", () => {
   });
 });
 
-describe("использование маржи", () => {
-  it("1 − withdrawable/available, в пределах [0, 1]", () => {
-    expect(marginUsage(1_000n * WAD, 714n * WAD)).toBeCloseTo(0.286, 3);
-    expect(marginUsage(1_000n * WAD, 1_500n * WAD)).toBe(0);
-    expect(marginUsage(1_000n * WAD, -5n * WAD)).toBe(1);
+describe("использование маржи на экране", () => {
+  it("WAD-доля SDK → процент с одним знаком", () => {
+    expect(fmtUsageWad(286n * 10n ** 15n)).toBe("28.6%");
+    expect(fmtUsageWad(0n)).toBe("0.0%");
   });
 
-  it("нечем измерять — undefined", () => {
-    expect(marginUsage(0n, 0n)).toBeUndefined();
-    expect(marginUsage(-1n, 0n)).toBeUndefined();
+  it("нет чтения или счёт под водой — «—», не 0 % и не 100 %", () => {
+    expect(fmtUsageWad(undefined)).toBe("—");
   });
 });
 

@@ -7,6 +7,8 @@ import type {
 import { wadToNumber } from "@liq/core";
 import type { UTCTimestamp } from "lightweight-charts";
 
+import { DASH, fmtPctNum } from "../../lib/format";
+
 /**
  * Чистые вычисления страницы Account. Здесь — и только здесь — встречаются две
  * системы единиц: портфель шлюза (decimal `number`, unix-секунды) и
@@ -106,21 +108,16 @@ export function pnlSeries(points: readonly PortfolioPoint[]): PnlPoint[] {
 }
 
 /**
- * Доля маржи, занятой позициями: `1 − withdrawable/available`, в `[0, 1]`.
- * Неположительный `available` — измерять нечем, `undefined`.
+ * Использование маржи для экрана: WAD-доля SDK (`useMarginUsage().data.usage`)
+ * → «28.6%». `undefined` — прочитать нечем или счёт под водой (SDK: требование
+ * положительно, `available ≤ 0`) — «—», а не 0 % и не 100 %.
  */
-export function marginUsage(
-  available: bigint,
-  withdrawable: bigint,
-): number | undefined {
-  if (available <= 0n) return undefined;
-  const used = 1 - wadToNumber(withdrawable) / wadToNumber(available);
-  return Math.min(1, Math.max(0, used));
+export function fmtUsageWad(usage: bigint | undefined): string {
+  return usage === undefined ? DASH : fmtPctNum(wadToNumber(usage));
 }
 
 /**
- * Доля нереализованного PnL в стоимости счёта. Без зажима, в отличие от
- * `marginUsage`: убыток больше стоимости — настоящий ответ, а не «−100 %».
+ * Доля нереализованного PnL в стоимости счёта. Без зажима: убыток больше стоимости — настоящий ответ, а не «−100 %».
  * Делить не на что (стоимость неизвестна или неположительна) — `null`.
  */
 export function pnlShare(

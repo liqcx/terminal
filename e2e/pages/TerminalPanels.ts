@@ -88,7 +88,7 @@ export class TradePanel {
   readonly orderSummary: Locator;
   readonly orderQty: Locator;
   readonly orderValue: Locator;
-  readonly orderCost: Locator;
+  readonly orderMargin: Locator;
   readonly orderLiqPrice: Locator;
   readonly postOnlyFlag: Locator;
   readonly iocFlag: Locator;
@@ -118,7 +118,7 @@ export class TradePanel {
     this.orderSummary = page.getByTestId("order-summary");
     this.orderQty = page.getByTestId("order-qty");
     this.orderValue = page.getByTestId("order-value");
-    this.orderCost = page.getByTestId("order-cost");
+    this.orderMargin = page.getByTestId("order-margin");
     this.orderLiqPrice = page.getByTestId("order-liq-price");
     this.postOnlyFlag = page.getByTestId("flag-post-only");
     this.iocFlag = page.getByTestId("flag-ioc");

@@ -5,7 +5,7 @@ import { expect, test } from "../support/fixtures";
 import { longPositionFixture, readyWorld } from "../support/world";
 
 test.describe("панель Account", () => {
-  test("пять строк макета на месте", async ({ page, world }) => {
+  test("шесть строк макета на месте", async ({ page, world }) => {
     await enterTerminal(page, world);
     const account = new AccountPanelPage(page);
 
@@ -15,6 +15,7 @@ test.describe("панель Account", () => {
     for (const name of [
       "unrealized-pnl",
       "equity",
+      "in-orders",
       "borrowed",
       "exposure",
       "leverage",
@@ -23,7 +24,7 @@ test.describe("панель Account", () => {
     }
   });
 
-  test("equity меньше стоимости счёта ровно на офчейн-лок", async ({
+  test("equity = available, офчейн-лок — отдельной строкой «In orders»", async ({
     page,
     world,
   }) => {
@@ -38,10 +39,23 @@ test.describe("панель Account", () => {
     );
     const account = new AccountPanelPage(page);
 
-    // Equity — ончейн getAvailableMargin (5 000 в readyWorld) минус лок,
-    // который приходит со шлюза; сама стоимость счёта на карточке не стоит —
-    // то же число уже показано в шапке рынка как `margin`.
-    await expect(account.row("equity")).toHaveText("$4,960.00");
+    // Equity — ончейн getAvailableMargin (5 000 в readyWorld): выставленный
+    // ордер её не двигает (решение 3, TRM-40); лок со шлюза — «In orders».
+    await expect(account.row("equity")).toHaveText("$5,000.00");
+    await expect(account.row("in-orders")).toHaveText("$40.00");
+  });
+
+  test("шлюз маржи недоступен — «In orders» «—», не $0.00; equity остаётся", async ({
+    page,
+    world,
+  }) => {
+    await enterTerminal(page, world, () =>
+      readyWorld({ faults: { routeStatus: { margin: 500 } } }),
+    );
+    const account = new AccountPanelPage(page);
+
+    await expect(account.row("equity")).toHaveText("$5,000.00");
+    await expect(account.row("in-orders")).toHaveText("—");
   });
 
   test("экспозиция и нереализованный PnL считаются по открытым позициям", async ({

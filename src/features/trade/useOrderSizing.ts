@@ -12,16 +12,32 @@ import {
   usdToSize,
   validateOrder,
 } from "@liq/sdk";
-import { useMarketsFullRestQuery } from "@liq/react";
+import {
+  useAccountDebtQuery,
+  useDebounce,
+  useMarginUsage,
+  useOrderMarginPreview,
+} from "@liq/react";
 import { wadToFixed } from "@liq/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { useCollateralBalances } from "../account/useCollateralBalances";
 import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
+import {
+  heldPreviewKey,
+  lockAmount,
+  MARK_DEBOUNCE_MS,
+  type MarketMark,
+  previewPrice,
+  type RowsView,
+  rowsView,
+  settledMark,
+  warnRequirement,
+} from "./orderMarginView";
+import { useAccountStateRefresh } from "./useAccountStateRefresh";
+import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
-
-const WAD = 10n ** 18n;
-const BPS = 10_000n;
 
 export type SizeUnit = "base" | "usd";
 
@@ -42,15 +58,18 @@ type OrderSizing = {
   pct: number; // 0–100 slice of buying power (what the control requested)
   maxSize: bigint; // buying-power ceiling, base units
   notional: bigint; // Usd, 18-dec
-  margin: bigint; // margin cost, 18-dec
   /**
    * Обе стороны разом — тикет по макету показывает их рядом.
    *
-   * @remarks Знаковый размер и оценка ликвидации живут здесь, а не отдельными
-   * полями: сторона выбирается нажатием кнопки подачи, и до нажатия ни одна
-   * из двух не «та самая».
+   * @remarks Знаковый размер живёт здесь, а не отдельным полем: сторона
+   * выбирается нажатием кнопки подачи, и до нажатия ни одна из двух не «та самая».
    */
   summary: TicketSummary;
+  /**
+   * Строки «Margin» и «Liq. Price» по сторонам — числа протокола из превью
+   * контракта по цене вкладки; прочерк, пока превью нет.
+   */
+  rows: RowsView;
   baseSymbol: string;
   baseDecimals: number;
   /** Потолок плеча рынка; `null` — рынок его не объявил. */
@@ -84,16 +103,34 @@ function parseSizeInput(
  * They are reconciled at every setter: typing a size re-derives `pct`; choosing
  * a `pct` rewrites the size; changing leverage rescales the size to preserve
  * `pct` against the new buying-power ceiling. Leverage never *fills* an empty
- * size — it only scales the ceiling and the margin/liq math.
+ * size — it only scales the buying-power ceiling (the ticket's Margin and
+ * Liq. Price are the protocol's, from the contract preview).
  */
 export function useOrderSizing(params: {
   market: MarketSummary | undefined;
+  /** Аккаунт для превью и R0; `undefined` — превью выключено. */
+  accountId: bigint | undefined;
   available: bigint;
   /** Шлюзовой `free` (`available − locked`, знаковый); `undefined` — не прочитан. */
   free: bigint | undefined;
+  /** Шлюзовой `locked`; `undefined` — не прочитан. Сбрасывает кэш превью при смене. */
+  locked: bigint | undefined;
   markPrice: bigint;
+  /** Активная вкладка тикета. */
+  tab: "Market" | "Limit";
+  /** Введённая лимитная цена; `0n` — поля нет, и на Limit превью не запрашивается. */
+  limitPrice: bigint;
 }): OrderSizing {
-  const { market, available, free, markPrice } = params;
+  const {
+    market,
+    accountId,
+    available,
+    free,
+    locked,
+    markPrice,
+    tab,
+    limitPrice,
+  } = params;
 
   const [sizeStr, setSizeStrRaw] = useState("");
   const [unit, setUnitRaw] = useState<SizeUnit>("base");
@@ -112,16 +149,6 @@ export function useOrderSizing(params: {
   // утверждение о рынке.
   const baseDecimals = 4;
 
-  // Maintenance-margin fraction (WAD) for the liq-price estimate; best-effort.
-  // `maintenanceMarginBps` is absent from leaner market payloads — guard so the
-  // estimate stays optional rather than throwing on `undefined`.
-  const { data: fullMarkets } = useMarketsFullRestQuery();
-  const fullRow = fullMarkets?.find((m) => m.id === market?.id);
-  const mmfWad =
-    typeof fullRow?.maintenanceMarginBps === "bigint"
-      ? (fullRow.maintenanceMarginBps * WAD) / BPS
-      : undefined;
-
   const sizeQty = parseSizeInput(sizeStr, unit, markPrice);
   const maxSize = sizeFromLeverage({
     availableUsd: Usd(available),
@@ -131,11 +158,90 @@ export function useOrderSizing(params: {
   const summary = ticketSummary({
     sizeQty: Qty(sizeQty),
     markPrice: Price(markPrice),
-    leverage,
-    mmfWad,
   });
   const notional = summary.value;
-  const margin = summary.cost;
+
+  // Превью контракта по цене вкладки, по запросу на сторону: у тикета две
+  // кнопки, и лонг с шортом дают разное R1 и разную ликвидацию. Без рынка
+  // `accountId` не передаётся — запрос выключен, а не спрошен про рынок 0.
+  // Задерживается пара «рынок + марк», а не один марк: иначе после смены рынка
+  // сглаженный марк остался бы старым и превью нового рынка спросилось бы по
+  // чужой цене. Пара держится стабильной ссылкой — useDebounce перезапускает
+  // таймер по смене значения.
+  const currentMark = useMemo<MarketMark>(
+    () => ({ marketId: market?.id ?? 0n, mark: markPrice }),
+    [market?.id, markPrice],
+  );
+  const heldMark = useDebounce(currentMark, MARK_DEBOUNCE_MS);
+  const debouncedMark = settledMark({ current: currentMark, held: heldMark });
+  const priceForPreview = Price(
+    previewPrice({ tab, mark: markPrice, debouncedMark, limit: limitPrice }),
+  );
+  const previewAccount = market === undefined ? undefined : accountId;
+  const longPreview = useOrderMarginPreview(
+    previewAccount,
+    market?.id ?? 0n,
+    summary.long.sizeDelta,
+    priceForPreview,
+  );
+  const shortPreview = useOrderMarginPreview(
+    previewAccount,
+    market?.id ?? 0n,
+    summary.short.sizeDelta,
+    priceForPreview,
+  );
+  // R0 — требование аккаунта до ордера. Есть только с данными: загрузка и
+  // ошибка дают `undefined`, а не 0n.
+  const { data: usage } = useMarginUsage(accountId);
+  const r0 = usage?.requiredInitialMargin;
+  // Кэш превью SDK сам не протухает при изменении счёта (филл — R0 и locked;
+  // депозит, вывод, погашение — коллатерал и долг), а R0 уже новый.
+  const { totalWad: collateral } = useCollateralBalances();
+  const { data: debt } = useAccountDebtQuery();
+  useAccountStateRefresh(accountId, { r0, locked, collateral, debt });
+  // R1 — требование всего аккаунта после ордера. `data` есть только у
+  // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
+  // смены размера, рынка или аккаунта прежнее значение не доживает до новой
+  // строки. Одна только цена (марк) двигается без прочерка: цифры стороны
+  // удерживаются, пока читается тот же аккаунт, рынок и введённый размер.
+  // Ключ держится на намерении пользователя (единица + строка), а не на
+  // выведенном `sizeDelta`: в USD размер пересчитывается из марка, и каждый
+  // его сдвиг менял бы ключ и гасил цифры. Запрос при этом спрашивает `sizeDelta`.
+  const heldKey = heldPreviewKey({
+    accountId: previewAccount,
+    marketId: market?.id,
+    unit,
+    sizeStr,
+  });
+  const long = useHeldPreview(
+    heldKey,
+    {
+      r1: longPreview.data?.requiredMargin,
+      liq: longPreview.data?.estimatedLiquidationPrice,
+    },
+    longPreview.isLoading,
+    longPreview.isFetching && longPreview.data !== undefined,
+  );
+  const short = useHeldPreview(
+    heldKey,
+    {
+      r1: shortPreview.data?.requiredMargin,
+      liq: shortPreview.data?.estimatedLiquidationPrice,
+    },
+    shortPreview.isLoading,
+    shortPreview.isFetching && shortPreview.data !== undefined,
+  );
+  const r1Long = long.r1;
+  const r1Short = short.r1;
+  const rows = rowsView({
+    long: { lock: lockAmount({ r1: r1Long, r0 }), liq: long.liq, stale: long.stale },
+    short: {
+      lock: lockAmount({ r1: r1Short, r0 }),
+      liq: short.liq,
+      stale: short.stale,
+    },
+  });
+
   const validation = validateOrder({
     markPrice,
     sizeQty: Qty(sizeQty),
@@ -146,12 +252,14 @@ export function useOrderSizing(params: {
     // им остаются шлюз и цепочка. Отказ по выдуманному числу отверг бы
     // ордера, которые протокол принял бы.
     maxLeverage: maxLeverage ?? Number.POSITIVE_INFINITY,
-    // Предупреждение `exceeds-available-margin` с 0.67.0 срабатывает, только
-    // когда известны обе стороны. `free` — `available − locked` со шлюза.
-    // `requiredMargin` — превью шлюза (`useOrderMarginPreview`), в тикете его
-    // пока нет: `undefined` значит «не знаем», предупреждения нет. Локальную
-    // оценку `margin` сюда не подставляем — она не то, с чем шлюз сверяет free.
-    requiredMargin: undefined,
+    // Шлюз допускает ордер, если `free ≥ R1` (R1 — требование всего аккаунта
+    // после ордера), поэтому с `free` сверяется R1, а не `max(0, R1 − R0)`,
+    // которую шлюз блокирует: разница меньше R1 и пропустила бы ордера,
+    // которые шлюз откажет. Сторон две, предупреждение одно — судит большее
+    // из прочитанных R1, то есть сторона, наращивающая экспозицию. Удержанное
+    // R1 тоже годится: предупреждение мягкое и submit не блокирует.
+    // `undefined` у любой из величин значит «не знаем»: предупреждения нет.
+    requiredMargin: warnRequirement(r1Long, r1Short),
     free: free === undefined ? undefined : Margin(free),
   });
 
@@ -217,8 +325,8 @@ export function useOrderSizing(params: {
     pct,
     maxSize,
     notional,
-    margin,
     summary,
+    rows,
     baseSymbol,
     baseDecimals,
     maxLeverage,

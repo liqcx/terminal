@@ -27,7 +27,7 @@ describe("свод счёта", () => {
     expect(s.leverage).toBeUndefined();
   });
 
-  it("equity вычитает офчейн-лок, а не долг", () => {
+  it("equity = available; лок — отдельное поле inOrders, долг — borrowed", () => {
     const s = summarize({
       available: 1000n * WAD,
       locked: 40n * WAD,
@@ -35,7 +35,8 @@ describe("свод счёта", () => {
       positions: [],
     });
     expect(s.accountValue).toBe(1000n * WAD);
-    expect(s.equity).toBe(960n * WAD);
+    expect(s.equity).toBe(1000n * WAD);
+    expect(s.inOrders).toBe(40n * WAD);
     expect(s.borrowed).toBe(7n * WAD);
   });
 
@@ -67,15 +68,15 @@ describe("свод счёта", () => {
     expect(s.leverage).toBeUndefined();
   });
 
-  it("использование маржи — доля available, недоступная к выводу", () => {
+  it("использование маржи — WAD SDK проходит как есть", () => {
     const s = summarize({
       available: 1000n * WAD,
-      withdrawable: 714n * WAD,
+      usage: 286n * 10n ** 15n,
       locked: 0n,
       debt: 0n,
       positions: [],
     });
-    expect(s.marginUsage).toBeCloseTo(0.286, 3);
+    expect(s.marginUsage).toBe(286n * 10n ** 15n);
   });
 
   it("free шлюза проходит как есть — и отрицательным", () => {
@@ -89,19 +90,25 @@ describe("свод счёта", () => {
     expect(s.free).toBe(-40n * WAD);
   });
 
-  it("без withdrawable и без залога использование маржи неизвестно", () => {
-    expect(
-      summarize({ available: 1000n * WAD, locked: 0n, debt: 0n, positions: [] })
-        .marginUsage,
-    ).toBeUndefined();
+  it("без чтения использования маржи оно неизвестно, а не 0", () => {
     expect(
       summarize({
-        available: undefined,
-        withdrawable: 0n,
+        available: 1000n * WAD,
         locked: 0n,
-        debt: 0n,
+        debt: 7n * WAD,
         positions: [],
       }).marginUsage,
     ).toBeUndefined();
+  });
+
+  it("лок шлюза не прочитан — inOrders неизвестен, а не $0", () => {
+    const s = summarize({
+      available: 1000n * WAD,
+      locked: undefined,
+      debt: 0n,
+      positions: [],
+    });
+    expect(s.inOrders).toBeUndefined();
+    expect(s.equity).toBe(1000n * WAD);
   });
 });

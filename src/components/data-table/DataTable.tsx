@@ -40,6 +40,11 @@ interface DataTableProps<T extends RowData> {
   emptyText: string;
   /** Что колонкам нужно от компонента: ячейки читают его через `table.options.meta`. */
   meta?: object;
+  /**
+   * Подписи колонок для меню видимости там, где `header` — не строка (подсказка,
+   * кнопка): без записи меню показало бы id колонки.
+   */
+  labels?: Record<string, string>;
 }
 
 /**
@@ -65,6 +70,7 @@ export function DataTable<T extends RowData>({
   notice = null,
   emptyText,
   meta,
+  labels,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({});
@@ -104,7 +110,8 @@ export function DataTable<T extends RowData>({
       columns={table.getAllLeafColumns().map((c) => ({
         id: c.id,
         label:
-          typeof c.columnDef.header === "string" ? c.columnDef.header : c.id,
+          labels?.[c.id] ??
+          (typeof c.columnDef.header === "string" ? c.columnDef.header : c.id),
         visible: c.getIsVisible(),
         canHide: c.getCanHide(),
         toggle: () => c.toggleVisibility(),

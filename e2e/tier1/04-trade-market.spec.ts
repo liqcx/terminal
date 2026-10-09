@@ -55,6 +55,10 @@ test.describe("market orders", () => {
       ((70_000n * WAD * 10_050n) / 10_000n).toString(), // mark + 0.5%
     );
 
+    // Мок записывает ордер при запросе, а форма очищается по ответу: без
+    // этого ожидания `fill` второго размера мог лечь раньше `reset()` и был
+    // бы стёрт им — кнопка Sell оставалась погашенной (флак и на базе #74).
+    await expect(trade.sizeInput).toHaveValue("");
     await trade.setSize("0.5");
     await trade.submit("sell");
     await expect.poll(() => world.submittedOrders.length).toBeGreaterThan(1);

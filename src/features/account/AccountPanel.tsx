@@ -35,6 +35,13 @@ export function AccountPanel() {
           value={summary.equity === undefined ? DASH : formatUsd(summary.equity)}
         />
         <Row
+          label="In orders"
+          testid="account-in-orders"
+          value={
+            summary.inOrders === undefined ? DASH : formatUsd(summary.inOrders)
+          }
+        />
+        <Row
           label="Borrowed"
           testid="account-borrowed"
           value={formatUsd(summary.borrowed)}
