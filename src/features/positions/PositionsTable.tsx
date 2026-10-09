@@ -6,16 +6,22 @@ import { useState } from "react";
 
 import { DataTable, MARKET_COLUMN_ID } from "@/components/data-table/DataTable";
 import { features, marketFilterFn } from "@/components/data-table/features";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import {
   DASH,
-  fmtLeverage,
   fmtPrice,
   fmtSignedPct,
   fmtSignedUsd,
 } from "../../lib/format";
 import { ClosePositionsDialog } from "./ClosePositionsDialog";
 import { TpSlDialog } from "./TpSlDialog";
+import { reqMarginText } from "./reqMargin";
 import { type PositionRow, usePositionRows } from "./usePositionRows";
 
 const helper = createColumnHelper<typeof features, PositionRow>();
@@ -32,6 +38,32 @@ interface PositionActions {
   requestEdit: (row: PositionRow) => void;
   /** Идёт ли проход закрытия — обе кнопки на это время выключены. */
   closing: boolean;
+}
+
+/** Подпись колонки «Req. margin» в меню видимости колонок (заголовок там не строка). */
+const COLUMN_LABELS = { margin: "Req. margin" };
+
+/** Что значит число в колонке — для подсказки заголовка. */
+const REQ_MARGIN_NOTE =
+  "Initial margin the protocol requires for this position — a size- and skew-dependent share plus the liquidation reward";
+
+/**
+ * Заголовок колонки с подсказкой. Провайдер свой: таблица стоит вне
+ * `MarketHeader`, где живёт общий.
+ */
+function ReqMarginHeader() {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help" data-testid="positions-req-margin-header">
+            Req. margin
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{REQ_MARGIN_NOTE}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 const columns = helper.columns([
@@ -55,9 +87,6 @@ const columns = helper.columns([
             className={`rounded-sm px-1 text-[11px] ${long ? "bg-long-soft text-long" : "bg-short-soft text-short"}`}
           >
             {long ? "Long" : "Short"}
-          </span>
-          <span className="rounded-sm bg-surface-2 px-1 text-[11px] text-muted">
-            {fmtLeverage(p.leverage)}
           </span>
         </span>
       );
@@ -103,10 +132,11 @@ const columns = helper.columns([
   }),
   helper.accessor((r) => Number(r.position.initialMarginUsd ?? 0n), {
     id: "margin",
-    header: "Margin",
+    header: () => <ReqMarginHeader />,
+    // `undefined` — «маржа позиции не известна»: ноль читался бы как «ничего не
+    // требуется». Сортировка при этом ставит неизвестное вместе с нулём.
     cell: (info) => {
-      const m = info.row.original.position.initialMarginUsd;
-      return m === undefined ? DASH : formatUsd(m);
+      return reqMarginText(info.row.original.position.initialMarginUsd);
     },
   }),
   helper.accessor((r) => Number(r.position.accruedFunding ?? 0n), {
@@ -291,6 +321,7 @@ export function PositionsTable() {
         data={rows}
         columns={columns}
         meta={actions}
+        labels={COLUMN_LABELS}
         testid="positions-table"
         rowId={(r) => r.position.marketId.toString()}
         loading={isLoading}

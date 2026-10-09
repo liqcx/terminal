@@ -37,6 +37,36 @@ test.describe("positions", () => {
     );
   });
 
+  test("колонка маржи называется «Req. margin», объясняет себя подсказкой; бейджа плеча нет", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      const w = readyWorld();
+      w.accounts[0].positions = [longPositionFixture()];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    // Заголовок на месте прежней колонки Margin (индекс 6), индексы не сдвинуты.
+    const header = page.getByTestId("table-header-margin");
+    await expect(header).toHaveText("Req. margin");
+    await expect(userInfo.positionsTable.locator("th").nth(6)).toHaveText(
+      "Req. margin",
+    );
+
+    await header.getByTestId("positions-req-margin-header").hover();
+    await expect(page.getByRole("tooltip").first()).toHaveText(
+      "Initial margin the protocol requires for this position — a size- and skew-dependent share plus the liquidation reward",
+    );
+
+    // Плечо позиции (TRM-12: notional / available аккаунта) не показывается:
+    // в ячейке стороны остаётся одно слово.
+    await expect(
+      userInfo.positionRow("200").locator("td").nth(1),
+    ).toHaveText("Long");
+  });
+
   test("shows the empty state with no positions", async ({ page, world }) => {
     const { userInfo } = await enterTerminal(page, world);
     await userInfo.selectTab("positions");
