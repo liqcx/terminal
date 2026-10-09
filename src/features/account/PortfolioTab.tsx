@@ -16,7 +16,7 @@ import {
 } from "../../lib/format";
 import { UserInfoTabs } from "../userinfo/UserInfoTabs";
 import { Panel, PeriodSelect, Stat, Unavailable } from "./AccountCards";
-import { LEDGER_PAGE, periodWindow, pnlSeries, pnlShare } from "./accountLogic";
+import { periodWindow, pnlSeries, pnlShare } from "./accountLogic";
 import { PnlChart } from "./PnlChart";
 import { useAccountSummary } from "./useAccountSummary";
 
@@ -34,14 +34,14 @@ export function PortfolioTab() {
     isPending: portfolioPending,
     isError: portfolioFailed,
   } = usePortfolioQuery(accountId, period);
+  // Вкладка читает только `totals`: шлюз считает их по всему окну на первой
+  // странице, независимо от `limit` и курсора (`SettlementLedgerTotals`), так
+  // что строки здесь не нужны — одна вместо двухсот.
   const {
     data: ledger,
     isPending: ledgerPending,
     isError: ledgerFailed,
-  } = useSettlementLedgerQuery(accountId, {
-    ...range,
-    limit: LEDGER_PAGE,
-  });
+  } = useSettlementLedgerQuery(accountId, { ...range, limit: 1 });
 
   const series = useMemo(
     () => (portfolio?.available ? pnlSeries(portfolio.points) : []),
