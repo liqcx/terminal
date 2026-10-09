@@ -26,7 +26,7 @@ PR #74). PR — draft в `main`. Деплой prod сейчас не работ�
 - `useOrderMarginPreview(...).requiredMargin` = R1 — требование **всего аккаунта** после ордера
   (с наградой ликвидатора и комиссией). Строка «Margin» тикета = `max(0, R1 − R0)`, R0 =
   `useMarginUsage(...).data.requiredInitialMargin` — ровно то, что заблокирует гейтвей. Предупреждение
-  `validateOrder`: `requiredMargin = R1`, `free` гейтвея — `R1 > free` ⇔ гейтвей отклонит.
+  `validateOrder`: `requiredMargin = R1`, `free` гейтвея — `R1 > free` ⇒ гейтвей отклонит (обратное не гарантировано: превью не учитывает убыток fill−mark, `validateOrder` — «необходимо, не достаточно»).
 - Цена превью = цена вкладки: Market → mark, Limit → введённая цена (`parsedTabPrice()`,
   `TradeForm.tsx:143-147`). Знаковый размер на сторону уже есть: `summary.long/short.sizeDelta`.
 - У тикета две кнопки (long/short) и две строки Liq. Price («long / short») — превью на каждую сторону.
