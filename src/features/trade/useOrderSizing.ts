@@ -18,16 +18,18 @@ import {
   useOrderMarginPreview,
 } from "@liq/react";
 import { wadToFixed } from "@liq/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
 import {
   lockAmount,
   MARK_DEBOUNCE_MS,
+  type MarketMark,
   previewPrice,
   type RowsView,
   rowsView,
+  settledMark,
   warnRequirement,
 } from "./orderMarginView";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
@@ -147,7 +149,16 @@ export function useOrderSizing(params: {
   // Превью контракта по цене вкладки, по запросу на сторону: у тикета две
   // кнопки, и лонг с шортом дают разное R1 и разную ликвидацию. Без рынка
   // `accountId` не передаётся — запрос выключен, а не спрошен про рынок 0.
-  const debouncedMark = useDebounce(markPrice, MARK_DEBOUNCE_MS);
+  // Задерживается пара «рынок + марк», а не один марк: иначе после смены рынка
+  // сглаженный марк остался бы старым и превью нового рынка спросилось бы по
+  // чужой цене. Пара держится стабильной ссылкой — useDebounce перезапускает
+  // таймер по смене значения.
+  const currentMark = useMemo<MarketMark>(
+    () => ({ marketId: market?.id ?? 0n, mark: markPrice }),
+    [market?.id, markPrice],
+  );
+  const heldMark = useDebounce(currentMark, MARK_DEBOUNCE_MS);
+  const debouncedMark = settledMark({ current: currentMark, held: heldMark });
   const priceForPreview = Price(
     previewPrice({ tab, mark: markPrice, debouncedMark, limit: limitPrice }),
   );

@@ -214,12 +214,14 @@ export interface MockWorld {
   indexPrice: bigint;
   /** gateway mark price (GET /markets/:id/price), 18-dec */
   price: bigint;
+  /** Марк отдельных рынков по id; рынок без записи берёт общий `price`. */
+  priceByMarket: Record<string, bigint>;
   /** getOrderFees read — WAD fee ratios (default 2bp maker / 6bp taker). */
   orderFees: { maker: bigint; taker: bigint };
   /**
    * Доля начальной маржи (WAD) в моке превью ордера: сумма
    * `requiredMarginForOrderWithPrice` — это R0 аккаунта плюс
-   * `(|размер после| − |размер до|) · indexPrice · доля`, не ниже нуля; та же
+   * `(|размер после| − |размер до|) · цена превью · доля`, не ниже нуля; та же
    * доля, умноженная на масштаб поддержки (0,5), даёт требование
    * поддержки в оценке ликвидации. По умолчанию 5%.
    */
@@ -331,6 +333,8 @@ export interface MockWorld {
   cancelledOrderIds: string[];
   /** Сколько раз приложение читало `requiredMarginForOrderWithPrice` (в том числе отказанных). */
   orderMarginReads: number;
+  /** Рынок и цена каждого чтения `requiredMarginForOrderWithPrice` (аргументы 1 и 3). */
+  orderMarginCalls: Array<{ marketId: string; price: bigint }>;
   /** signed amountDelta of the last modifyCollateral (deposit > 0, withdraw < 0) */
   lastCollateralDelta: bigint;
   /** collateralId (synth market id) of the last modifyCollateral — must be the sUSDC id, not 0 (#459) */
@@ -520,6 +524,7 @@ export function freshWorld(opts: ScenarioOptions = {}): MockWorld {
     accounts: opts.accounts ?? [],
     indexPrice: price,
     price,
+    priceByMarket: {},
     orderFees: { maker: 2n * 10n ** 14n, taker: 6n * 10n ** 14n },
     orderMarginRatio: 5n * 10n ** 16n,
     skew: WAD,
@@ -576,6 +581,7 @@ export function freshWorld(opts: ScenarioOptions = {}): MockWorld {
     submittedOrders: [],
     cancelledOrderIds: [],
     orderMarginReads: 0,
+    orderMarginCalls: [],
     lastCollateralDelta: 0n,
     lastCollateralId: 0n,
     sentTxs: [],

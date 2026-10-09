@@ -212,11 +212,17 @@ function computeRead(
     // getFundingParameters. Падение первого — ошибка превью, остальных — только
     // «уровня ликвидации нет», поэтому мок отвечает всеми шестью.
     //
-    // R1 = R0 + (|размер после| − |размер до|) · indexPrice · доля — требование
-    // всего аккаунта после ордера; по сокращающему ордеру оно падает, и
+    // R1 = R0 + (|размер после| − |размер до|) · цена · доля — требование
+    // всего аккаунта после ордера, где цена — четвёртый аргумент чтения (цена
+    // превью, которую выбрало приложение), а не `indexPrice` мира: иначе тест
+    // не отличил бы превью по введённой цене от превью по марку; по сокращающему ордеру оно падает, и
     // шлюз блокирует `max(0, R1 − R0)`.
     case "requiredMarginForOrderWithPrice": {
       world.orderMarginReads += 1;
+      world.orderMarginCalls.push({
+        marketId: String(args[1]),
+        price: args[3] as bigint,
+      });
       if (world.faults.orderMarginFails) throw new Error("preview reverts");
       const account = findAccount(world, args[0] as bigint);
       const delta = args[2] as bigint;
@@ -227,7 +233,7 @@ function computeRead(
       const grown = absOf(held + delta) - absOf(held);
       const required =
         (account?.requiredInitialMargin ?? 0n) +
-        (grown * world.indexPrice * world.orderMarginRatio) / (WAD * WAD);
+        (grown * (args[3] as bigint) * world.orderMarginRatio) / (WAD * WAD);
       return [required > 0n ? required : 0n];
     }
     // initialMarginRatio 0 и скью-масштаб 0 — доля не зависит от размера:

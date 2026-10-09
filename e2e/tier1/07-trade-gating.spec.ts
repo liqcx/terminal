@@ -1,7 +1,7 @@
 import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
 import { longPositionFixture, readyWorld } from "../support/world";
-import { WAD } from "../support/constants";
+import { MARKET, MARKET_ETH, WAD } from "../support/constants";
 
 test.describe("trade form gating & controls", () => {
   test("submit is disabled until a size is entered", async ({ page, world }) => {
@@ -208,8 +208,11 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.submitButton).toBeDisabled();
     expect(world.orderMarginReads).toBe(0);
 
-    await trade.setLimitPrice("70000");
-    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+    // Цена лимитки не равна марку ($70 000): R1 мока считается по цене
+    // аргумента чтения, поэтому $3 000 = 1 BTC · $60 000 · 5% бывает только
+    // у превью, спрошенного по введённой цене, а не по марку.
+    await trade.setLimitPrice("60000");
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
     await expect(trade.submitButton).toBeEnabled();
   });
 
@@ -249,18 +252,51 @@ test.describe("trade form gating & controls", () => {
   }) => {
     const { trade } = await enterTerminal(page, world, () => {
       const w = readyWorld();
-      // free гейтвея 5 000, R0 = 3 000: ордер на 1.2 BTC даёт R1 = 3 000 +
-      // 4 200 = 7 200 > free, а блокировка R1 − R0 = 4 200 ≤ free. Шлюз
-      // допускает ордер при free ≥ R1, поэтому отклонит его — и предупреждение
-      // обязано сверять free именно с R1, не с блокировкой.
+      // Цепочка отдаёт available 5 000, шлюз — free 4 500 (locked 500): тест
+      // обязан отличить `free` от `available`. R0 = 3 000, ордер на 0.5 BTC даёт
+      // R1 = 3 000 + 1 750 = 4 750 — между free и available. Шлюз допускает
+      // ордер при free ≥ R1, поэтому отклонит его, а блокировка R1 − R0 = 1 750
+      // ≤ free: предупреждение сверяет free именно с R1, и именно с free.
       w.accounts[0].requiredInitialMargin = 3_000n * WAD;
+      w.accountMargin = {
+        available: (5_000n * WAD).toString(),
+        locked: (500n * WAD).toString(),
+        free: (4_500n * WAD).toString(),
+      };
       return w;
     });
-    await trade.setSize("1.2");
-    await expect(trade.orderMargin).toHaveText("$4,200.00 / $4,200.00");
+    await trade.setSize("0.5");
+    await expect(trade.orderMargin).toHaveText("$1,750.00 / $1,750.00");
     await expect(trade.orderWarning).toHaveText("Exceeds available margin");
     // Предупреждение — не блок: шлюз и цепочка остаются судьёй.
     await expect(trade.submitButton).toBeEnabled();
+  });
+
+  test("после смены рынка превью нового рынка не спрашивается по марку старого", async ({
+    page,
+    world,
+  }) => {
+    const { trade, market } = await enterTerminal(page, world, () => {
+      const w = readyWorld({ markets: [MARKET, MARKET_ETH] });
+      w.priceByMarket[MARKET_ETH.id] = 2_000n * WAD;
+      return w;
+    });
+    const btcMark = 70_000n * WAD;
+    const ethMark = 2_000n * WAD;
+    const callsFor = (id: string) =>
+      world.orderMarginCalls.filter((c) => c.marketId === id);
+
+    await trade.setSize("1");
+    await expect.poll(() => callsFor(MARKET.id).at(-1)?.price).toBe(btcMark);
+
+    await market.pickMarket(MARKET_ETH.id);
+    // Сглаженный марк догоняет через MARK_DEBOUNCE_MS; ждём, пока превью ETH
+    // спросят по ETH-му марку, и только потом смотрим на всё, что спрашивали.
+    await expect
+      .poll(() => callsFor(MARKET_ETH.id).some((c) => c.price === ethMark))
+      .toBe(true);
+    expect(callsFor(MARKET_ETH.id).length).toBeGreaterThan(0);
+    expect(callsFor(MARKET_ETH.id).map((c) => c.price)).not.toContain(btcMark);
   });
 
   test("в пределах free предупреждения нет", async ({ page, world }) => {

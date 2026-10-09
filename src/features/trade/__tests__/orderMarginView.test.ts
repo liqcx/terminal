@@ -5,6 +5,7 @@ import {
   lockAmount,
   previewPrice,
   rowsView,
+  settledMark,
   warnRequirement,
 } from "../orderMarginView";
 
@@ -45,6 +46,14 @@ describe("warnRequirement", () => {
 
   it("нулевое R1 — известное значение, а не отсутствие", () => {
     expect(warnRequirement(Margin(0n), undefined)).toBe(0n);
+  });
+
+  // Известное недосказывание (не пересказывание): пока большая сторона
+  // грузится, судит известная меньшая — liqu-web в этом случае вернул бы
+  // undefined, терминал показывает известное.
+  it("известна только меньшая сторона — она и судит (недосказывание, пока вторая грузится)", () => {
+    const r1Reducing = usd("1750");
+    expect(warnRequirement(r1Reducing, undefined)).toBe(r1Reducing);
   });
 });
 
@@ -104,5 +113,37 @@ describe("previewPrice", () => {
     expect(
       previewPrice({ tab: "Limit", mark: MARK, debouncedMark: SLOW, limit: 0n }),
     ).toBe(0n);
+  });
+});
+
+describe("settledMark", () => {
+  const BTC = 200n;
+  const ETH = 201n;
+
+  it("тот же рынок — сглаженный марк", () => {
+    expect(
+      settledMark({
+        current: { marketId: BTC, mark: 70_000n },
+        held: { marketId: BTC, mark: 69_900n },
+      }),
+    ).toBe(69_900n);
+  });
+
+  it("другой рынок — сырой марк текущего, а не чужой сглаженный", () => {
+    expect(
+      settledMark({
+        current: { marketId: ETH, mark: 2_000n },
+        held: { marketId: BTC, mark: 70_000n },
+      }),
+    ).toBe(2_000n);
+  });
+
+  it("сглаженного марка ещё нет (0n) — сырой", () => {
+    expect(
+      settledMark({
+        current: { marketId: BTC, mark: 70_000n },
+        held: { marketId: BTC, mark: 0n },
+      }),
+    ).toBe(70_000n);
   });
 });

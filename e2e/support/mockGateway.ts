@@ -553,7 +553,7 @@ export async function mockGateway(page: Page, world: MockWorld): Promise<void> {
     if (price) {
       if (await faulted(route, world, "price")) return;
       await send(route, {
-        price: world.price.toString(),
+        price: (world.priceByMarket[price[1]] ?? world.price).toString(),
         timestamp: 1_717_200_000_000,
       });
       return;
