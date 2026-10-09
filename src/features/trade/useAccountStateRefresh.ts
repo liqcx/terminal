@@ -9,7 +9,7 @@ import { type AccountState, foldAccountState } from "./orderMarginView";
  *
  * @remarks Обход SDK 0.67.0: срез `orderMarginPreview` не помечается устаревшим
  * ничем (`dirtiedBy: []`, `refetchInterval` нет), а R0 перечитывается. Решение
- * «изменился ли счёт» — {@link foldAccountState}. Префикс ключа берётся из
+ * «изменился ли счёт» (R0, `locked`, коллатерал, долг) — {@link foldAccountState}. Префикс ключа берётся из
  * фабрики SDK: ключ среза — `["liq", "orderMarginPreview", networkId, accountId,
  * marketId, sizeDelta, price, orderCost]` (liq-core, `liqSlices.orderMarginPreview`:
  * scope `networkId, accountId, marketId`, params `sizeDelta, price, orderCost`),
@@ -28,7 +28,7 @@ export function useAccountStateRefresh(
   const seen = useRef<
     { accountId: bigint | undefined; state: AccountState } | undefined
   >(undefined);
-  const { r0, locked } = state;
+  const { r0, locked, collateral, debt } = state;
 
   useEffect(() => {
     const last = seen.current;
@@ -36,7 +36,7 @@ export function useAccountStateRefresh(
       last !== undefined && last.accountId === accountId
         ? last.state
         : undefined;
-    const step = foldAccountState(prev, { r0, locked });
+    const step = foldAccountState(prev, { r0, locked, collateral, debt });
     seen.current = { accountId, state: step.state };
     if (!step.changed || accountId === undefined) return;
     void queryClient.invalidateQueries({
@@ -44,5 +44,5 @@ export function useAccountStateRefresh(
         .orderMarginPreview(accountId.toString(), "", "", "", "")
         .slice(0, -4),
     });
-  }, [accountId, r0, locked, queryClient, keys]);
+  }, [accountId, r0, locked, collateral, debt, queryClient, keys]);
 }

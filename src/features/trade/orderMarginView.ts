@@ -233,30 +233,45 @@ export interface AccountState {
   r0: bigint | undefined;
   /** `locked` шлюза; `undefined` — не прочитан (чтение шлюза требует входа). */
   locked: bigint | undefined;
+  /**
+   * Сумма коллатерала счёта, WAD; `undefined` — не прочитана целиком. Меняется
+   * только депозитом, выводом и погашением — дискретно, в отличие от
+   * `available`, который двигается вместе с PnL.
+   */
+  collateral: bigint | undefined;
+  /** Долг счёта; `undefined` — не прочитан. */
+  debt: bigint | undefined;
 }
+
+const ACCOUNT_STATE_FIELDS = ["r0", "locked", "collateral", "debt"] as const;
 
 /**
  * Изменилось ли состояние счёта настолько, что кэш превью надо сбросить.
  *
  * @remarks Превью SDK (`orderMarginPreview`) не помечается устаревшим ничем
- * (`dirtiedBy: []`, без `refetchInterval`), а R0 (`useMarginUsage`) перечитывается
- * по событиям и каждые 10 с. После филла или депозита при неизменных размере и цене
- * ключ превью тот же, и в Margin = `max(0, R1 − R0)` попадал бы R1 до-филла против
- * R0 после. Поэтому сбрасывать нужно при смене любого известного значения.
+ * (`dirtiedBy: []`, без `refetchInterval`). Филл двигает R0 (`useMarginUsage`
+ * перечитывает его по событиям и каждые 10 с), и в Margin = `max(0, R1 − R0)`
+ * попал бы R1 до филла против R0 после. Депозит, вывод и погашение не двигают ни
+ * R0, ни `locked`, но сдвигают уровень ликвидации — их ловит сумма коллатерала
+ * и долг. Сбрасывать нужно при смене любого известного значения из четырёх.
+ * `available` сюда не входит нарочно: он двигается вместе с PnL, и превью
+ * перечитывалось бы и тускнело каждые ~10 с.
  *
  * Неизвестное (`undefined`) ни с чем не сравнивается: первая загрузка не меняет
  * счёт, а пропавшее чтение — не повод перечитывать. `prev` — последние известные
  * значения ({@link foldAccountState}); `undefined` — предыдущего нет.
- * Сам сброс превью R0 не двигает, так что обратной связи нет.
+ * Сам сброс превью эти величины не двигает, так что обратной связи нет.
  */
 export function accountStateChanged(
   prev: AccountState | undefined,
   next: AccountState,
 ): boolean {
   if (prev === undefined) return false;
-  const differs = (a: bigint | undefined, b: bigint | undefined) =>
-    a !== undefined && b !== undefined && a !== b;
-  return differs(prev.r0, next.r0) || differs(prev.locked, next.locked);
+  return ACCOUNT_STATE_FIELDS.some((f) => {
+    const a = prev[f];
+    const b = next[f];
+    return a !== undefined && b !== undefined && a !== b;
+  });
 }
 
 /**
@@ -274,6 +289,8 @@ export function foldAccountState(
     state: {
       r0: next.r0 ?? prev?.r0,
       locked: next.locked ?? prev?.locked,
+      collateral: next.collateral ?? prev?.collateral,
+      debt: next.debt ?? prev?.debt,
     },
     changed: accountStateChanged(prev, next),
   };

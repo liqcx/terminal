@@ -13,6 +13,7 @@ import {
   validateOrder,
 } from "@liq/sdk";
 import {
+  useAccountDebtQuery,
   useDebounce,
   useMarginUsage,
   useOrderMarginPreview,
@@ -20,6 +21,7 @@ import {
 import { wadToFixed } from "@liq/core";
 import { useMemo, useState } from "react";
 
+import { useCollateralBalances } from "../account/useCollateralBalances";
 import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
 import {
@@ -192,8 +194,11 @@ export function useOrderSizing(params: {
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
   const r0 = usage?.requiredInitialMargin;
-  // Кэш превью SDK сам не протухает при изменении счёта, а R0 уже новый.
-  useAccountStateRefresh(accountId, { r0, locked });
+  // Кэш превью SDK сам не протухает при изменении счёта (филл — R0 и locked;
+  // депозит, вывод, погашение — коллатерал и долг), а R0 уже новый.
+  const { totalWad: collateral } = useCollateralBalances();
+  const { data: debt } = useAccountDebtQuery();
+  useAccountStateRefresh(accountId, { r0, locked, collateral, debt });
   // R1 — требование всего аккаунта после ордера. `data` есть только у
   // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
   // смены размера, рынка или аккаунта прежнее значение не доживает до новой

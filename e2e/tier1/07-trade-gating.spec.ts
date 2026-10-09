@@ -412,6 +412,30 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.orderMargin).toHaveText("$3,000.00 / $0.00");
   });
 
+  test("депозит при том же размере и цене: Liq. Price перечитывается по новому балансу", async ({
+    page,
+    world,
+  }) => {
+    const { trade, market, deposit } = await enterTerminal(page, world);
+
+    await trade.selectTab("limit");
+    await trade.setSize("1");
+    await trade.setLimitPrice("60000");
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
+    const liqBefore = await trade.orderLiqPrice.textContent();
+    expect(liqBefore).not.toBe("51,500 / 68,500");
+
+    // Депозит не двигает ни R0, ни locked шлюза, но двигает коллатерал и
+    // уровень ликвидации; ключ превью прежний, и без сброса кэша Liq. Price
+    // остался бы прежним навсегда.
+    await market.openDeposit();
+    await deposit.deposit("5000");
+    await expect(deposit.root).toBeHidden();
+
+    // Свежее чтение по балансу с депозитом: ликвидация дальше от входа.
+    await expect(trade.orderLiqPrice).toHaveText("51,500 / 68,500");
+  });
+
   test("сброс превью при смене счёта: пока перечитывается, цифры удержаны и тусклы", async ({
     page,
     world,
