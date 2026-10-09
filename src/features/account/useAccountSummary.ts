@@ -1,15 +1,13 @@
-import type { AccountMargin } from "@liq/api-client";
 import {
   useAccountDebtQuery,
   useAccountId,
+  useAccountMargin,
   useAvailableMarginQuery,
   useEnrichedPositions,
-  useLiqClient,
+  useMarginUsage,
 } from "@liq/react";
-import { useQuery } from "@tanstack/react-query";
 
 import { useSelectedMarket } from "../market/useSelectedMarket";
-import { marginUsage } from "./accountLogic";
 
 const WAD = 10n ** 18n;
 
@@ -22,8 +20,8 @@ interface SummaryPosition {
 interface SummaryInput {
   /** `getAvailableMargin` — залог, переоценённый по марку. `undefined` = не прочитано. */
   available: bigint | undefined;
-  /** `getWithdrawableMargin` — то, что можно вывести, не задев начальную маржу. */
-  withdrawable?: bigint;
+  /** `useMarginUsage().data.usage`, WAD; `undefined` — нет чтения или счёт под водой. */
+  usage?: bigint;
   /** Офчейн-лок под неурегулированные филлы. */
   locked: bigint;
   /** `free` шлюза = `available − locked`; может быть отрицательным. */
@@ -35,15 +33,18 @@ interface SummaryInput {
 interface AccountSummary {
   unrealizedPnl: bigint;
   accountValue: bigint | undefined;
+  /** Решение 3 (TRM-40): equity = available. Офчейн-лок не вычитается. */
   equity: bigint | undefined;
+  /** Офчейн-лок под открытые ордера — отдельной строкой «In orders». */
+  inOrders: bigint;
   borrowed: bigint;
   exposure: bigint;
   /** WAD-кратность. `undefined`, когда стоимость счёта неизвестна или неположительна. */
   leverage: bigint | undefined;
   /** Доступно для новых ордеров по мнению шлюза. */
   free: bigint | undefined;
-  /** Доля маржи под позициями, `[0, 1]`. */
-  marginUsage: number | undefined;
+  /** Требуемая начальная маржа / available, WAD; `undefined` — «—». */
+  marginUsage: bigint | undefined;
 }
 
 /**
@@ -63,37 +64,30 @@ export function summarize(input: SummaryInput): AccountSummary {
   );
   const exposure = input.positions.reduce((sum, p) => sum + p.notional, 0n);
   const accountValue = input.available;
-  const equity =
-    accountValue === undefined ? undefined : accountValue - input.locked;
+  const equity = accountValue;
   const leverage =
     accountValue === undefined || accountValue <= 0n
       ? undefined
       : (exposure * WAD) / accountValue;
-  const usage =
-    accountValue === undefined || input.withdrawable === undefined
-      ? undefined
-      : marginUsage(accountValue, input.withdrawable);
   return {
     unrealizedPnl,
     accountValue,
     equity,
+    inOrders: input.locked,
     borrowed: input.debt,
     exposure,
     leverage,
     free: input.free,
-    marginUsage: usage,
+    marginUsage: input.usage,
   };
 }
 
 /**
  * Панель Account поверх четырёх чтений SDK.
  *
- * @remarks Одного из них нет хуком в `@liq/react` — `accounts.getMargin` живёт
- * только методом сервиса, поэтому здесь стоит локальный `useQuery`. Это пробел
- * SDK, а не разрешение считать в терминале: логика чтения остаётся за швом,
- * снаружи только проводка. Имя запроса не начинается с `liq/`, поэтому
- * `resetAuthedQueries` его не сметает; ключ несёт `accountId`, так что вход
- * другим кошельком получает другую запись кэша, а не чужие числа.
+ * @remarks Маржа шлюза — `useAccountMargin`, использование —
+ * `useMarginUsage`: те же записи кэша, что у тикета, и SDK сам сбрасывает их
+ * на `orderStateChanged` и прочих событиях.
  *
  * Долг с SDK 0.56.0 читает `useAccountDebtQuery` — одна запись кэша на панель,
  * диалог вывода и протухание после расчёта или погашения.
@@ -103,26 +97,20 @@ export function useAccountSummary(): {
   isLoading: boolean;
 } {
   const accountId = useAccountId();
-  const client = useLiqClient();
   const { allMarketIds } = useSelectedMarket();
 
   const { data: margins, isLoading: marginsLoading } = useAvailableMarginQuery();
   const { data: positions = EMPTY } = useEnrichedPositions(allMarketIds);
 
-  const { data: gatewayMargin } = useQuery<AccountMargin>({
-    queryKey: ["terminal", "account-margin", accountId?.toString() ?? "none"],
-    queryFn: () => client.accounts.getMargin(accountId!),
-    enabled: accountId !== undefined,
-    staleTime: 5_000,
-    refetchInterval: 15_000,
-  });
+  const { data: gatewayMargin } = useAccountMargin(accountId);
+  const { data: marginUsage } = useMarginUsage(accountId);
 
   const { data: debt } = useAccountDebtQuery();
 
   return {
     summary: summarize({
       available: margins?.available,
-      withdrawable: margins?.withdrawable,
+      usage: marginUsage?.usage,
       locked: gatewayMargin?.locked ?? 0n,
       free: gatewayMargin?.free,
       debt: debt ?? 0n,

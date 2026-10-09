@@ -9,14 +9,13 @@ import { useMemo, useState } from "react";
 
 import {
   DASH,
-  fmtPctNum,
   fmtSignedPctNum,
   fmtSignedUsd,
   fmtUsdNum,
 } from "../../lib/format";
 import { UserInfoTabs } from "../userinfo/UserInfoTabs";
 import { Panel, PeriodSelect, Stat, Unavailable } from "./AccountCards";
-import { periodWindow, pnlSeries, pnlShare } from "./accountLogic";
+import { fmtUsageWad, periodWindow, pnlSeries, pnlShare } from "./accountLogic";
 import { PnlChart } from "./PnlChart";
 import { useAccountSummary } from "./useAccountSummary";
 
@@ -167,7 +166,7 @@ export function PortfolioTab() {
           label="Margin usage"
           testid="portfolio-margin-usage"
           value={
-            summary.marginUsage === undefined ? DASH : fmtPctNum(summary.marginUsage)
+            fmtUsageWad(summary.marginUsage)
           }
         />
       </div>

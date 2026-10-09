@@ -12,7 +12,6 @@ import { accountHref } from "@/lib/hashRoute";
 import {
   DASH,
   fmtLeverage,
-  fmtPctNum,
   fmtSignedPctNum,
   fmtSignedUsd,
   fmtSignedUsdNum,
@@ -24,6 +23,7 @@ import { Panel, Stat, Unavailable } from "./AccountCards";
 import {
   ACTIVITY_LABEL,
   activityRows,
+  fmtUsageWad,
   pnlSeries,
   windowPnl,
   type ActivityRow,
@@ -245,9 +245,7 @@ export function OverviewTab() {
             summary.equity === undefined ? DASH : formatUsd(summary.equity)
           }
           sub={`Margin usage ${
-            summary.marginUsage === undefined
-              ? DASH
-              : fmtPctNum(summary.marginUsage)
+            fmtUsageWad(summary.marginUsage)
           }`}
           link={{ href: accountHref("portfolio"), text: "View portfolio" }}
         />
