@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
 import {
+  heldPreviewKey,
   lockAmount,
   MARK_DEBOUNCE_MS,
   type MarketMark,
@@ -32,6 +33,7 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
+import { useAccountStateRefresh } from "./useAccountStateRefresh";
 import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
 
@@ -109,14 +111,24 @@ export function useOrderSizing(params: {
   available: bigint;
   /** Шлюзовой `free` (`available − locked`, знаковый); `undefined` — не прочитан. */
   free: bigint | undefined;
+  /** Шлюзовой `locked`; `undefined` — не прочитан. Сбрасывает кэш превью при смене. */
+  locked: bigint | undefined;
   markPrice: bigint;
   /** Активная вкладка тикета. */
   tab: "Market" | "Limit";
   /** Введённая лимитная цена; `0n` — поля нет, и на Limit превью не запрашивается. */
   limitPrice: bigint;
 }): OrderSizing {
-  const { market, accountId, available, free, markPrice, tab, limitPrice } =
-    params;
+  const {
+    market,
+    accountId,
+    available,
+    free,
+    locked,
+    markPrice,
+    tab,
+    limitPrice,
+  } = params;
 
   const [sizeStr, setSizeStrRaw] = useState("");
   const [unit, setUnitRaw] = useState<SizeUnit>("base");
@@ -180,6 +192,8 @@ export function useOrderSizing(params: {
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
   const r0 = usage?.requiredInitialMargin;
+  // Кэш превью SDK сам не протухает при изменении счёта, а R0 уже новый.
+  useAccountStateRefresh(accountId, { r0, locked });
   // R1 — требование всего аккаунта после ордера. `data` есть только у
   // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
   // смены размера, рынка или аккаунта прежнее значение не доживает до новой
@@ -188,7 +202,12 @@ export function useOrderSizing(params: {
   // Ключ держится на намерении пользователя (единица + строка), а не на
   // выведенном `sizeDelta`: в USD размер пересчитывается из марка, и каждый
   // его сдвиг менял бы ключ и гасил цифры. Запрос при этом спрашивает `sizeDelta`.
-  const heldKey = `${previewAccount ?? ""}:${market?.id ?? ""}:${unit}:${sizeStr}`;
+  const heldKey = heldPreviewKey({
+    accountId: previewAccount,
+    marketId: market?.id,
+    unit,
+    sizeStr,
+  });
   const long = useHeldPreview(
     heldKey,
     {
@@ -196,6 +215,7 @@ export function useOrderSizing(params: {
       liq: longPreview.data?.estimatedLiquidationPrice,
     },
     longPreview.isLoading,
+    longPreview.isFetching && longPreview.data !== undefined,
   );
   const short = useHeldPreview(
     heldKey,
@@ -204,6 +224,7 @@ export function useOrderSizing(params: {
       liq: shortPreview.data?.estimatedLiquidationPrice,
     },
     shortPreview.isLoading,
+    shortPreview.isFetching && shortPreview.data !== undefined,
   );
   const r1Long = long.r1;
   const r1Short = short.r1;

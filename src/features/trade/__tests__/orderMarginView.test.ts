@@ -2,7 +2,11 @@ import { Margin, Price, Usd } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
 import {
+  type AccountState,
+  accountStateChanged,
+  foldAccountState,
   type HeldFigures,
+  heldPreviewKey,
   holdPreviewStep,
   lockAmount,
   previewPrice,
@@ -223,5 +227,74 @@ describe("holdPreviewStep", () => {
     const heldNull = step.held;
     const held2 = holdPreviewStep(heldNull, KEY, unread, true);
     expect(held2.shown).toEqual({ r1: R1, liq: null, stale: true });
+  });
+
+  it("перечитывание с данными (сброс кэша) — цифры те же, но помечены устаревшими", () => {
+    const step = holdPreviewStep(held, KEY, landed, false, true);
+    expect(step.shown).toEqual({ r1: R1, liq: LIQ, stale: true });
+    expect(step.held).toBe(held);
+  });
+
+  it("перечитывание кончилось — новые цифры без пометки", () => {
+    const next = { r1: usd("3000"), liq: Price.parse("66800") };
+    const step = holdPreviewStep(held, KEY, next, false, false);
+    expect(step.shown).toEqual({ r1: next.r1, liq: next.liq, stale: false });
+  });
+});
+
+describe("accountStateChanged / foldAccountState", () => {
+  const base: AccountState = { r0: usd("0"), locked: usd("100") };
+
+  it("первая загрузка (предыдущего нет) — без сброса", () => {
+    expect(accountStateChanged(undefined, base)).toBe(false);
+  });
+
+  it("те же значения — без сброса", () => {
+    expect(accountStateChanged(base, { ...base })).toBe(false);
+  });
+
+  it("сменился R0 — сброс", () => {
+    expect(accountStateChanged(base, { ...base, r0: usd("3500") })).toBe(true);
+  });
+
+  it("сменился locked шлюза — сброс", () => {
+    expect(accountStateChanged(base, { ...base, locked: usd("200") })).toBe(true);
+  });
+
+  it("неизвестное не сравнивается: R0 пропал или появился впервые — без сброса", () => {
+    expect(accountStateChanged(base, { ...base, r0: undefined })).toBe(false);
+    expect(
+      accountStateChanged({ r0: undefined, locked: undefined }, base),
+    ).toBe(false);
+  });
+
+  it("fold помнит последнее известное: пропавшее и вернувшееся значение сравнивается с ним", () => {
+    const gap = foldAccountState(base, { r0: undefined, locked: base.locked });
+    expect(gap.changed).toBe(false);
+    expect(gap.state.r0).toBe(base.r0);
+    const back = foldAccountState(gap.state, { r0: usd("3500"), locked: base.locked });
+    expect(back.changed).toBe(true);
+  });
+});
+
+describe("heldPreviewKey", () => {
+  const base = { accountId: 1n, marketId: 200n, unit: "base", sizeStr: "1" };
+
+  it("аккаунт, рынок, единица и строка размера — каждая часть меняет ключ", () => {
+    const key = heldPreviewKey(base);
+    expect(heldPreviewKey({ ...base })).toBe(key);
+    expect(heldPreviewKey({ ...base, accountId: 2n })).not.toBe(key);
+    expect(heldPreviewKey({ ...base, marketId: 201n })).not.toBe(key);
+    expect(heldPreviewKey({ ...base, unit: "usd" })).not.toBe(key);
+    expect(heldPreviewKey({ ...base, sizeStr: "2" })).not.toBe(key);
+  });
+
+  it("нет аккаунта или рынка — не то же, что нулевые", () => {
+    expect(heldPreviewKey({ ...base, accountId: undefined })).not.toBe(
+      heldPreviewKey({ ...base, accountId: 0n }),
+    );
+    expect(heldPreviewKey({ ...base, marketId: undefined })).not.toBe(
+      heldPreviewKey({ ...base, marketId: 0n }),
+    );
   });
 });

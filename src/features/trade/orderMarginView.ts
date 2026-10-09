@@ -126,8 +126,9 @@ export function settledMark(input: {
  * @remarks Limit — введённая цена как есть, без задержки (`0n` — поля нет,
  * превью выключено). Market — марк, сглаженный `debouncedMark` (его выбирает
  * {@link settledMark}). Ключ запроса несёт цену, так что смена марка — новый
- * запрос, и строки на миг становятся «—»; задержка лишь откладывает эту смену
- * не дольше чем на {@link MARK_DEBOUNCE_MS}. Пока сглаженного марка ещё нет
+ * запрос; строки при этом не гаснут в «—», а удерживают прежние цифры тусклыми,
+ * пока читается новая цена ({@link holdPreviewStep}). Задержка откладывает эту
+ * смену не дольше чем на {@link MARK_DEBOUNCE_MS}. Пока сглаженного марка ещё нет
  * (`0n`, первый кадр), берётся сырой: первое число не ждёт задержки.
  */
 export function previewPrice(input: {
@@ -138,6 +139,24 @@ export function previewPrice(input: {
 }): bigint {
   if (input.tab === "Limit") return input.limit;
   return input.debouncedMark > 0n ? input.debouncedMark : input.mark;
+}
+
+/**
+ * Ключ удержания цифр: аккаунт, рынок, единица и введённая строка размера.
+ *
+ * @remarks Каждая часть нужна: чужой аккаунт или рынок под тем же размером
+ * показали бы чужие цифры. Цена в ключ не входит — удержание и существует ради
+ * сдвига одной только цены. Выведенный `sizeDelta` тоже не входит: в USD он
+ * дрожит вместе с маркой. `undefined` — «нет» (запрос выключен), отличимое от `0n`.
+ */
+export function heldPreviewKey(input: {
+  accountId: bigint | undefined;
+  marketId: bigint | undefined;
+  unit: string;
+  sizeStr: string;
+}): string {
+  const { accountId, marketId, unit, sizeStr } = input;
+  return `${accountId ?? ""}:${marketId ?? ""}:${unit}:${sizeStr}`;
 }
 
 /** Что превью отдало по одной стороне; `undefined` — не прочитано. */
@@ -161,7 +180,7 @@ export interface ShownFigures extends PreviewFigures {
 }
 
 /**
- * Удержание цифр, пока двигается одна только цена.
+ * Удержание цифр, пока двигается одна только цена или перечитывается кэш.
  *
  * @remarks У превью SDK нет TanStack `placeholderData`, а цена входит в ключ запроса:
  * каждая смена марка — новый ключ, и строки на круг RPC становились бы «—».
@@ -169,7 +188,14 @@ export interface ShownFigures extends PreviewFigures {
  * последние прочитанные цифры с пометкой `stale`. Другой ключ (сменился размер,
  * рынок или аккаунт), упавшее чтение и выключенный запрос (`inFlight` ложно, а
  * цифр нет) показывают `fresh` — «не прочитано»: чужая цифра под новым ордером
- * соврала бы. Прочитанное `fresh` всегда выигрывает у удержанного.
+ * соврала бы.
+ *
+ * `refreshing` — у запроса есть данные, и он их перечитывает (`isFetching` при
+ * `data`): так происходит после сброса кэша при смене счёта
+ * ({@link accountStateChanged}). TanStack в этот момент оставляет прежний `data`
+ * и `isLoading` ложно, и цифры от до-филла показались бы свежими; с `refreshing`
+ * они остаются, но помечены `stale` и тускнеют, пока не придёт новое чтение.
+ * Прочитанное `fresh` вне перечитывания всегда выигрывает у удержанного.
  *
  * Возвращает следующее удержанное состояние (тот же объект, пока ничего не
  * изменилось) и то, что показать.
@@ -179,6 +205,7 @@ export function holdPreviewStep(
   key: string,
   fresh: PreviewFigures,
   inFlight: boolean,
+  refreshing = false,
 ): { held: HeldFigures | undefined; shown: ShownFigures } {
   if (fresh.r1 !== undefined) {
     const liq = fresh.liq ?? null;
@@ -189,10 +216,65 @@ export function holdPreviewStep(
       held.liq === liq
         ? held
         : { key, r1: fresh.r1, liq };
-    return { held: next, shown: { r1: fresh.r1, liq, stale: false } };
+    return {
+      held: next,
+      shown: { r1: fresh.r1, liq, stale: refreshing },
+    };
   }
   if (held !== undefined && held.key === key && inFlight) {
     return { held, shown: { r1: held.r1, liq: held.liq, stale: true } };
   }
   return { held: undefined, shown: { ...fresh, stale: false } };
+}
+
+/** Часть состояния счёта, от которой зависит превью ордера. */
+export interface AccountState {
+  /** R0 — `requiredInitialMargin` счёта на цепочке; `undefined` — не прочитан. */
+  r0: bigint | undefined;
+  /** `locked` шлюза; `undefined` — не прочитан (чтение шлюза требует входа). */
+  locked: bigint | undefined;
+}
+
+/**
+ * Изменилось ли состояние счёта настолько, что кэш превью надо сбросить.
+ *
+ * @remarks Превью SDK (`orderMarginPreview`) не помечается устаревшим ничем
+ * (`dirtiedBy: []`, без `refetchInterval`), а R0 (`useMarginUsage`) перечитывается
+ * по событиям и каждые 10 с. После филла или депозита при неизменных размере и цене
+ * ключ превью тот же, и в Margin = `max(0, R1 − R0)` попадал бы R1 до-филла против
+ * R0 после. Поэтому сбрасывать нужно при смене любого известного значения.
+ *
+ * Неизвестное (`undefined`) ни с чем не сравнивается: первая загрузка не меняет
+ * счёт, а пропавшее чтение — не повод перечитывать. `prev` — последние известные
+ * значения ({@link foldAccountState}); `undefined` — предыдущего нет.
+ * Сам сброс превью R0 не двигает, так что обратной связи нет.
+ */
+export function accountStateChanged(
+  prev: AccountState | undefined,
+  next: AccountState,
+): boolean {
+  if (prev === undefined) return false;
+  const differs = (a: bigint | undefined, b: bigint | undefined) =>
+    a !== undefined && b !== undefined && a !== b;
+  return differs(prev.r0, next.r0) || differs(prev.locked, next.locked);
+}
+
+/**
+ * Следующее запомненное состояние счёта и нужен ли сброс.
+ *
+ * @remarks Запоминаются последние *известные* значения по полям: поле, на миг
+ * ставшее `undefined`, не должно стирать память, иначе следующее чтение
+ * считалось бы «первой загрузкой» и пропустило изменение.
+ */
+export function foldAccountState(
+  prev: AccountState | undefined,
+  next: AccountState,
+): { state: AccountState; changed: boolean } {
+  return {
+    state: {
+      r0: next.r0 ?? prev?.r0,
+      locked: next.locked ?? prev?.locked,
+    },
+    changed: accountStateChanged(prev, next),
+  };
 }

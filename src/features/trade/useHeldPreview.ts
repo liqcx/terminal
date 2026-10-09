@@ -20,9 +20,10 @@ export function useHeldPreview(
   key: string,
   fresh: PreviewFigures,
   inFlight: boolean,
+  refreshing: boolean,
 ): ShownFigures {
   const [held, setHeld] = useState<HeldFigures | undefined>(undefined);
-  const step = holdPreviewStep(held, key, fresh, inFlight);
+  const step = holdPreviewStep(held, key, fresh, inFlight, refreshing);
 
   // Подстройка состояния в рендере (приём из документации React): эффект с
   // setState дал бы лишний кадр с прежним удержанным значением.

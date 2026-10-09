@@ -204,8 +204,10 @@ function computeRead(
       return [rows];
     }
     // Account-level margins paired with the position read above in the same
-    // multicall (getAccountPositionSnapshot). No fixture models per-account
-    // required margins yet, so 0 for all three — safe: accountMargin()'s
+    // multicall (getAccountPositionSnapshot). Only the first one is modelled:
+    // R0 comes from the account fixture's `requiredInitialMargin` (what the
+    // order preview's R1 is offset by in the Margin row); maintenance
+    // and the third value stay 0 — safe: accountMargin()'s
     // ratio()/leverageFor()/liquidationPriceFor() all guard the zero case
     // (see @liqpro/liq-core's accountMargin) rather than dividing by it.
     case "getRequiredMargins": {

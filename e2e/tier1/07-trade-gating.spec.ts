@@ -386,6 +386,82 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.orderMargin).toHaveText("$1,750.00 / $1,750.00");
   });
 
+  test("после филла при том же размере и цене Margin считается по перечитанному превью", async ({
+    page,
+    world,
+  }) => {
+    await page.clock.install();
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.selectTab("limit");
+    await trade.setSize("1");
+    await trade.setLimitPrice("60000");
+    // R0 = 0: R1 = 5% · 1 · $60 000 = $3 000 на обе стороны.
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
+
+    // Покоящийся ордер исполнился: счёт держит лонг 1 BTC, R0 = $3 500. Размер
+    // и цена те же — ключ превью прежний, и без сброса кэша Margin считался бы
+    // как max(0, R1 до филла − R0 после).
+    world.accounts[0].positions = [longPositionFixture()];
+    world.accounts[0].requiredInitialMargin = 3_500n * WAD;
+    // R0 перечитывается раз в 10 с (useMarginUsage).
+    await page.clock.runFor(15_000);
+
+    // Лонг: R1 = 3 500 + 3 000 = 6 500 → блокировка 3 000. Шорт сокращает
+    // позицию: R1 = 500 → блокировка 0.
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $0.00");
+  });
+
+  test("сброс превью при смене счёта: пока перечитывается, цифры удержаны и тусклы", async ({
+    page,
+    world,
+  }) => {
+    await page.clock.install();
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.selectTab("limit");
+    await trade.setSize("1");
+    await trade.setLimitPrice("60000");
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
+
+    armHold(world, "orderMarginRead");
+    world.accounts[0].positions = [longPositionFixture()];
+    world.accounts[0].requiredInitialMargin = 3_500n * WAD;
+    await page.clock.runFor(15_000);
+
+    // Перечитывание в пути: TanStack держит прежний `data`, но цифры помечены
+    // устаревшими, а не выданы за свежие.
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(2);
+
+    releaseHold(world, "orderMarginRead");
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $0.00");
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
+  });
+
+  test("смена рынка при удержанных цифрах — прочерк, а не цифры прошлого рынка", async ({
+    page,
+    world,
+  }) => {
+    const { trade, market } = await enterTerminal(page, world, () => {
+      const w = readyWorld({ markets: [MARKET, MARKET_ETH] });
+      w.priceByMarket[MARKET_ETH.id] = 2_000n * WAD;
+      return w;
+    });
+
+    await trade.setSize("1");
+    await expect(trade.orderMargin).toHaveText("$3,500.00 / $3,500.00");
+
+    armHold(world, "orderMarginRead");
+    await market.pickMarket(MARKET_ETH.id);
+    // Размер тот же (1), но рынок другой: $3 500 — цифра BTC.
+    await expect(trade.orderMargin).toHaveText("— / —");
+    await expect(trade.orderLiqPrice).toHaveText("— / —");
+
+    releaseHold(world, "orderMarginRead");
+    // 5% · 1 ETH · $2 000.
+    await expect(trade.orderMargin).toHaveText("$100.00 / $100.00");
+  });
+
   test("в пределах free предупреждения нет", async ({ page, world }) => {
     const { trade } = await enterTerminal(page, world, () => {
       const w = readyWorld();
