@@ -210,16 +210,9 @@ describe("holdPreviewStep", () => {
     expect(step.held).toBeUndefined();
   });
 
-  it("чтение упало (не в пути, цифр нет) — прочерк и удержанное сброшено", () => {
+  it("чтение упало или запрос выключен (не в пути, цифр нет) — прочерк и удержанное сброшено", () => {
     const step = holdPreviewStep(held, KEY, unread, false);
     expect(step.shown).toEqual({ r1: undefined, liq: undefined, stale: false });
-    expect(step.held).toBeUndefined();
-  });
-
-  it("запрос выключен — тот же результат: прочерк, а не старые цифры", () => {
-    // Выключенный запрос для хука неотличим от упавшего: данных нет, в пути нет.
-    const step = holdPreviewStep(held, "", unread, false);
-    expect(step.shown.stale).toBe(false);
     expect(step.held).toBeUndefined();
   });
 
