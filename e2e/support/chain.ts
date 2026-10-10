@@ -214,7 +214,7 @@ function computeRead(
       const account = findAccount(world, args[0] as bigint);
       return [account?.requiredInitialMargin ?? 0n, 0n, 0n];
     }
-    // Превью ордера (`getOrderMarginPreview` в @liqpro/liq-onchain 0.67): одна
+    // Превью ордера (`getOrderMarginPreview` в @liqpro/liq-onchain): одна
     // мультиколла из шести чтений — requiredMarginForOrderWithPrice,
     // getAvailableMargin, getRequiredMargins, getAccountFullPositionInfo (все
     // четыре выше или ниже по списку), getLiquidationParameters и

@@ -1,12 +1,36 @@
 import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
-import { longPositionFixture, readyWorld } from "../support/world";
+import {
+  armHold,
+  longPositionFixture,
+  readyWorld,
+  releaseHold,
+  sseOrderUpdateFrame,
+} from "../support/world";
 import { MARKET, MARKET_ETH, WAD } from "../support/constants";
-import { armHold, releaseHold } from "../support/world";
+import type { MockWorld } from "../support/world";
 
 // Зеркало `MARK_DEBOUNCE_MS` из src/features/trade/orderMarginView.ts: e2e не
 // импортирует код приложения, поэтому при смене задержки там — менять и здесь.
 const MARK_DEBOUNCE_MS = 2_000;
+
+/**
+ * Шлёт в SSE аккаунта переход ордера в SETTLED — событие `orderSettled` SDK 0.68,
+ * от которого протухают превью маржи и R0.
+ *
+ * @remarks Кадр уходит, только когда НОВЕЙШЕЕ соединение уже подписано на
+ * `orders:1`: подписка на аккаунт приходит раньше `order:{id}`, и клиент
+ * переподключается — кадр, поданный в щель, достался бы прерванному соединению.
+ */
+async function settleOrderOverSse(world: MockWorld): Promise<void> {
+  await expect
+    .poll(() => world.sseConnections.at(-1) ?? [])
+    .toContain("orders:1");
+  world.sseFrames = [
+    sseOrderUpdateFrame("ord-limit-1", "SETTLED", { channel: "orders:1" }),
+  ];
+  await expect.poll(() => world.sseFrames.length).toBe(0); // кадр доставлен
+}
 
 test.describe("trade form gating & controls", () => {
   test("submit is disabled until a size is entered", async ({ page, world }) => {
@@ -390,7 +414,6 @@ test.describe("trade form gating & controls", () => {
     page,
     world,
   }) => {
-    await page.clock.install();
     const { trade } = await enterTerminal(page, world);
 
     await trade.selectTab("limit");
@@ -400,12 +423,14 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
 
     // Покоящийся ордер исполнился: счёт держит лонг 1 BTC, R0 = $3 500. Размер
-    // и цена те же — ключ превью прежний, и без сброса кэша Margin считался бы
-    // как max(0, R1 до филла − R0 после).
+    // и цена те же — ключ превью прежний; Margin = max(0, R1 − R0) верен, только
+    // если превью и R0 перечитаны вместе.
     world.accounts[0].positions = [longPositionFixture()];
     world.accounts[0].requiredInitialMargin = 3_500n * WAD;
-    // R0 перечитывается раз в 10 с (useMarginUsage).
-    await page.clock.runFor(15_000);
+    // Путь проверки — событие, а не таймер: SDK 0.68 помечает срез превью
+    // устаревшим по `orderSettled` (переход ордера в SETTLED в SSE аккаунта).
+    // Таймер SDK (10 с) здесь не используется: он совпал бы с ожиданием expect.
+    await settleOrderOverSse(world);
 
     // Лонг: R1 = 3 500 + 3 000 = 6 500 → блокировка 3 000. Шорт сокращает
     // позицию: R1 = 500 → блокировка 0.
@@ -425,9 +450,9 @@ test.describe("trade form gating & controls", () => {
     const liqBefore = await trade.orderLiqPrice.textContent();
     expect(liqBefore).not.toBe("51,500 / 68,500");
 
-    // Депозит не двигает ни R0, ни locked шлюза, но двигает коллатерал и
-    // уровень ликвидации; ключ превью прежний, и без сброса кэша Liq. Price
-    // остался бы прежним навсегда.
+    // Депозит не двигает R0, но двигает коллатерал и уровень ликвидации; ключ
+    // превью прежний, и Liq. Price обновляется только потому, что SDK 0.68
+    // помечает срез устаревшим по событию `deposited`.
     await market.openDeposit();
     await deposit.deposit("5000");
     await expect(deposit.root).toBeHidden();
@@ -436,11 +461,10 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.orderLiqPrice).toHaveText("51,500 / 68,500");
   });
 
-  test("сброс превью при смене счёта: пока перечитывается, цифры удержаны и тусклы", async ({
+  test("пока SDK перечитывает превью после филла, цифры удержаны и тусклы", async ({
     page,
     world,
   }) => {
-    await page.clock.install();
     const { trade } = await enterTerminal(page, world);
 
     await trade.selectTab("limit");
@@ -451,7 +475,7 @@ test.describe("trade form gating & controls", () => {
     armHold(world, "orderMarginRead");
     world.accounts[0].positions = [longPositionFixture()];
     world.accounts[0].requiredInitialMargin = 3_500n * WAD;
-    await page.clock.runFor(15_000);
+    await settleOrderOverSse(world);
 
     // Перечитывание в пути: TanStack держит прежний `data`, но цифры помечены
     // устаревшими, а не выданы за свежие.

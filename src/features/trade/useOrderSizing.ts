@@ -13,7 +13,6 @@ import {
   validateOrder,
 } from "@liq/sdk";
 import {
-  useAccountDebtQuery,
   useDebounce,
   useMarginUsage,
   useOrderMarginPreview,
@@ -21,7 +20,6 @@ import {
 import { wadToFixed } from "@liq/core";
 import { useMemo, useState } from "react";
 
-import { useCollateralBalances } from "../account/useCollateralBalances";
 import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
 import {
@@ -35,7 +33,6 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
-import { useAccountStateRefresh } from "./useAccountStateRefresh";
 import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
 
@@ -113,8 +110,6 @@ export function useOrderSizing(params: {
   available: bigint;
   /** Шлюзовой `free` (`available − locked`, знаковый); `undefined` — не прочитан. */
   free: bigint | undefined;
-  /** Шлюзовой `locked`; `undefined` — не прочитан. Сбрасывает кэш превью при смене. */
-  locked: bigint | undefined;
   markPrice: bigint;
   /** Активная вкладка тикета. */
   tab: "Market" | "Limit";
@@ -126,7 +121,6 @@ export function useOrderSizing(params: {
     accountId,
     available,
     free,
-    locked,
     markPrice,
     tab,
     limitPrice,
@@ -194,11 +188,8 @@ export function useOrderSizing(params: {
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
   const r0 = usage?.requiredInitialMargin;
-  // Кэш превью SDK сам не протухает при изменении счёта (филл — R0 и locked;
-  // депозит, вывод, погашение — коллатерал и долг), а R0 уже новый.
-  const { totalWad: collateral } = useCollateralBalances();
-  const { data: debt } = useAccountDebtQuery();
-  useAccountStateRefresh(accountId, { r0, locked, collateral, debt });
+  // Кэш превью сбрасывает сам SDK (0.68): срез кошелька протухает от
+  // `orderSettled` / `deposited` / `withdrawn` / `repaid` и перечитывается раз в 10 с.
   // R1 — требование всего аккаунта после ордера. `data` есть только у
   // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
   // смены размера, рынка или аккаунта прежнее значение не доживает до новой

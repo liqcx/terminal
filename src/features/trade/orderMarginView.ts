@@ -191,8 +191,9 @@ export interface ShownFigures extends PreviewFigures {
  * соврала бы.
  *
  * `refreshing` — у запроса есть данные, и он их перечитывает (`isFetching` при
- * `data`): так происходит после сброса кэша при смене счёта
- * ({@link accountStateChanged}). TanStack в этот момент оставляет прежний `data`
+ * `data`): так происходит после того как SDK пометил срез
+ * устаревшим (филл, депозит, вывод, погашение) или сработал его 10-секундный
+ * таймер. TanStack в этот момент оставляет прежний `data`
  * и `isLoading` ложно, и цифры от до-филла показались бы свежими; с `refreshing`
  * они остаются, но помечены `stale` и тускнеют, пока не придёт новое чтение.
  * Прочитанное `fresh` вне перечитывания всегда выигрывает у удержанного.
@@ -225,73 +226,4 @@ export function holdPreviewStep(
     return { held, shown: { r1: held.r1, liq: held.liq, stale: true } };
   }
   return { held: undefined, shown: { ...fresh, stale: false } };
-}
-
-/** Часть состояния счёта, от которой зависит превью ордера. */
-export interface AccountState {
-  /** R0 — `requiredInitialMargin` счёта на цепочке; `undefined` — не прочитан. */
-  r0: bigint | undefined;
-  /** `locked` шлюза; `undefined` — не прочитан (чтение шлюза требует входа). */
-  locked: bigint | undefined;
-  /**
-   * Сумма коллатерала счёта, WAD; `undefined` — не прочитана целиком. Меняется
-   * только депозитом, выводом и погашением — дискретно, в отличие от
-   * `available`, который двигается вместе с PnL.
-   */
-  collateral: bigint | undefined;
-  /** Долг счёта; `undefined` — не прочитан. */
-  debt: bigint | undefined;
-}
-
-const ACCOUNT_STATE_FIELDS = ["r0", "locked", "collateral", "debt"] as const;
-
-/**
- * Изменилось ли состояние счёта настолько, что кэш превью надо сбросить.
- *
- * @remarks Превью SDK (`orderMarginPreview`) не помечается устаревшим ничем
- * (`dirtiedBy: []`, без `refetchInterval`). Филл двигает R0 (`useMarginUsage`
- * перечитывает его по событиям и каждые 10 с), и в Margin = `max(0, R1 − R0)`
- * попал бы R1 до филла против R0 после. Депозит, вывод и погашение не двигают ни
- * R0, ни `locked`, но сдвигают уровень ликвидации — их ловит сумма коллатерала
- * и долг. Сбрасывать нужно при смене любого известного значения из четырёх.
- * `available` сюда не входит нарочно: он двигается вместе с PnL, и превью
- * перечитывалось бы и тускнело каждые ~10 с.
- *
- * Неизвестное (`undefined`) ни с чем не сравнивается: первая загрузка не меняет
- * счёт, а пропавшее чтение — не повод перечитывать. `prev` — последние известные
- * значения ({@link foldAccountState}); `undefined` — предыдущего нет.
- * Сам сброс превью эти величины не двигает, так что обратной связи нет.
- */
-export function accountStateChanged(
-  prev: AccountState | undefined,
-  next: AccountState,
-): boolean {
-  if (prev === undefined) return false;
-  return ACCOUNT_STATE_FIELDS.some((f) => {
-    const a = prev[f];
-    const b = next[f];
-    return a !== undefined && b !== undefined && a !== b;
-  });
-}
-
-/**
- * Следующее запомненное состояние счёта и нужен ли сброс.
- *
- * @remarks Запоминаются последние *известные* значения по полям: поле, на миг
- * ставшее `undefined`, не должно стирать память, иначе следующее чтение
- * считалось бы «первой загрузкой» и пропустило изменение.
- */
-export function foldAccountState(
-  prev: AccountState | undefined,
-  next: AccountState,
-): { state: AccountState; changed: boolean } {
-  return {
-    state: {
-      r0: next.r0 ?? prev?.r0,
-      locked: next.locked ?? prev?.locked,
-      collateral: next.collateral ?? prev?.collateral,
-      debt: next.debt ?? prev?.debt,
-    },
-    changed: accountStateChanged(prev, next),
-  };
 }

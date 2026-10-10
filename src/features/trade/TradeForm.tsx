@@ -133,7 +133,6 @@ export function TradeForm() {
     accountId,
     available: margins?.available ?? 0n,
     free: gatewayMargin?.free,
-    locked: gatewayMargin?.locked,
     markPrice,
     tab,
     limitPrice: parseOrZero(Price.parse, limitPrice),
