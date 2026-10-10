@@ -117,23 +117,30 @@ describe("useInvalidationRefetch", () => {
     expect(out()).toBe("fetching/refreshing");
   });
 
-  it("чтение без данных — не обновление: показывать под пометкой нечего", async () => {
+  it("первое чтение без данных, протухшее по событию — не обновление: показывать под пометкой нечего", async () => {
     const fresh = new QueryClient();
-    const gate = deferred<number>();
-    next = gate.promise;
+    const key = ["fresh"];
     const c2 = document.createElement("div");
     const r2 = createRoot(c2);
     function P2() {
-      const q = useQuery({ queryKey: ["fresh"], queryFn: () => next });
+      // Первое чтение, которое не кончается: данных нет.
+      const q = useQuery({ queryKey: key, queryFn: () => new Promise<number>(() => {}) });
       return createElement(
         "span",
-        { id: "o" },
-        String(useInvalidationRefetch(fresh, ["fresh"], q.isFetching, q.data !== undefined)),
+        null,
+        String(useInvalidationRefetch(fresh, key, q.isFetching, q.data !== undefined)),
       );
     }
     await act(async () => {
       r2.render(createElement(QueryClientProvider, { client: fresh }, createElement(P2)));
     });
+    await act(async () => {
+      void fresh.invalidateQueries({ queryKey: key });
+    });
+    await flush();
+    // Условия «протухло» и «читается» выполнены; без данных флаг всё равно ложен.
+    expect(fresh.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(fresh.getQueryState(key)?.fetchStatus).toBe("fetching");
     expect(c2.textContent).toBe("false");
     act(() => r2.unmount());
   });
