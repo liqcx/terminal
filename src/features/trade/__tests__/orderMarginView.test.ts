@@ -226,7 +226,7 @@ describe("holdPreviewStep", () => {
     expect(held2.shown).toEqual({ r1: R1, liq: null, stale: true });
   });
 
-  it("перечитывание с данными (сброс кэша) — цифры те же, но помечены устаревшими", () => {
+  it("перечитывание с данными (SDK пометил срез устаревшим) — цифры те же, но помечены устаревшими", () => {
     const step = holdPreviewStep(held, KEY, landed, false, true);
     expect(step.shown).toEqual({ r1: R1, liq: LIQ, stale: true });
     expect(step.held).toBe(held);

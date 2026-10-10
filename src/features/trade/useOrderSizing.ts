@@ -14,10 +14,13 @@ import {
 } from "@liq/sdk";
 import {
   useDebounce,
+  useLiqQueryKeys,
   useMarginUsage,
   useOrderMarginPreview,
+  useWallet,
 } from "@liq/react";
 import { wadToFixed } from "@liq/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import type { MarketSummary } from "../market/useSelectedMarket";
@@ -33,6 +36,7 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
+import { isInvalidationRefetch } from "./previewRefresh";
 import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
 
@@ -184,6 +188,30 @@ export function useOrderSizing(params: {
     summary.short.sizeDelta,
     priceForPreview,
   );
+  // Тусклить цифры стоит на перечитывании после протухания среза (филл,
+  // депозит, вывод, погашение), а не на каждый такт 10-секундного таймера SDK.
+  // Ключ собран так же, как в `useOrderMarginPreview` (SDK 0.68); когда SDK
+  // отдаст флаг `refreshing` сам, этот код уходит.
+  const queryClient = useQueryClient();
+  const queryKeys = useLiqQueryKeys();
+  const wallet = useWallet();
+  const refreshingOf = (
+    sizeDelta: bigint,
+    preview: { isFetching: boolean; data: unknown },
+  ): boolean =>
+    isInvalidationRefetch(
+      queryClient,
+      queryKeys.orderMarginPreview(
+        wallet ?? "",
+        previewAccount?.toString() ?? "none",
+        (market?.id ?? 0n).toString(),
+        sizeDelta.toString(),
+        priceForPreview.toString(),
+        "none",
+      ),
+      preview.isFetching,
+      preview.data !== undefined,
+    );
   // R0 — требование аккаунта до ордера. Есть только с данными: загрузка и
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
@@ -211,7 +239,7 @@ export function useOrderSizing(params: {
       liq: longPreview.data?.estimatedLiquidationPrice,
     },
     longPreview.isLoading,
-    longPreview.isFetching && longPreview.data !== undefined,
+    refreshingOf(summary.long.sizeDelta, longPreview),
   );
   const short = useHeldPreview(
     heldKey,
@@ -220,7 +248,7 @@ export function useOrderSizing(params: {
       liq: shortPreview.data?.estimatedLiquidationPrice,
     },
     shortPreview.isLoading,
-    shortPreview.isFetching && shortPreview.data !== undefined,
+    refreshingOf(summary.short.sizeDelta, shortPreview),
   );
   const r1Long = long.r1;
   const r1Short = short.r1;

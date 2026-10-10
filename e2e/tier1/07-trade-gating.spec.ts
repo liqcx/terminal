@@ -429,12 +429,16 @@ test.describe("trade form gating & controls", () => {
     world.accounts[0].requiredInitialMargin = 3_500n * WAD;
     // Путь проверки — событие, а не таймер: SDK 0.68 помечает срез превью
     // устаревшим по `orderSettled` (переход ордера в SETTLED в SSE аккаунта).
-    // Таймер SDK (10 с) здесь не используется: он совпал бы с ожиданием expect.
+    // Таймер SDK перечитывает превью раз в 10 с, а `expect` по умолчанию ждёт
+    // тоже 10 с и мог бы дождаться таймера. Пин `timeout: 5_000` короче такта —
+    // именно он отделяет путь события от таймера.
     await settleOrderOverSse(world);
 
     // Лонг: R1 = 3 500 + 3 000 = 6 500 → блокировка 3 000. Шорт сокращает
     // позицию: R1 = 500 → блокировка 0.
-    await expect(trade.orderMargin).toHaveText("$3,000.00 / $0.00");
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $0.00", {
+      timeout: 5_000,
+    });
   });
 
   test("депозит при том же размере и цене: Liq. Price перечитывается по новому балансу", async ({
@@ -452,13 +456,16 @@ test.describe("trade form gating & controls", () => {
 
     // Депозит не двигает R0, но двигает коллатерал и уровень ликвидации; ключ
     // превью прежний, и Liq. Price обновляется только потому, что SDK 0.68
-    // помечает срез устаревшим по событию `deposited`.
+    // помечает срез устаревшим по событию `deposited`. Пин `timeout: 5_000`
+    // короче 10-секундного такта SDK и отделяет путь события от таймера.
     await market.openDeposit();
     await deposit.deposit("5000");
     await expect(deposit.root).toBeHidden();
 
     // Свежее чтение по балансу с депозитом: ликвидация дальше от входа.
-    await expect(trade.orderLiqPrice).toHaveText("51,500 / 68,500");
+    await expect(trade.orderLiqPrice).toHaveText("51,500 / 68,500", {
+      timeout: 5_000,
+    });
   });
 
   test("пока SDK перечитывает превью после филла, цифры удержаны и тусклы", async ({
@@ -478,11 +485,44 @@ test.describe("trade form gating & controls", () => {
     await settleOrderOverSse(world);
 
     // Перечитывание в пути: TanStack держит прежний `data`, но цифры помечены
-    // устаревшими, а не выданы за свежие.
-    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(2);
+    // устаревшими, а не выданы за свежие. Пин `timeout: 5_000` — как выше:
+    // тусклость обязана прийти от события, а не от таймера SDK.
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(2, {
+      timeout: 5_000,
+    });
 
     releaseHold(world, "orderMarginRead");
     await expect(trade.orderMargin).toHaveText("$3,000.00 / $0.00");
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
+  });
+
+  test("такт 10-секундного таймера SDK без события цифры не тусклит", async ({
+    page,
+    world,
+  }) => {
+    // Часы подменены до загрузки: такт `refetchInterval` (10 с) прокручиваем руками.
+    await page.clock.install();
+    const { trade } = await enterTerminal(page, world);
+
+    await trade.selectTab("limit");
+    await trade.setSize("1");
+    await trade.setLimitPrice("60000");
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
+    await page.clock.runFor(MARK_DEBOUNCE_MS + 500);
+    const readsBefore = world.orderMarginReads;
+
+    // Ни одного события аккаунта: перечитывание идёт только от таймера и висит.
+    armHold(world, "orderMarginRead");
+    await page.clock.runFor(11_000);
+    // Цифры те же и яркие: тусклость значит «срез протух», а не «идёт такт».
+    await expect(trade.orderMargin).toHaveText("$3,000.00 / $3,000.00");
+    await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
+
+    // Контроль: такт действительно сработал и читал превью.
+    releaseHold(world, "orderMarginRead");
+    await expect
+      .poll(() => world.orderMarginReads)
+      .toBeGreaterThan(readsBefore);
     await expect(trade.orderMargin.locator("[data-stale]")).toHaveCount(0);
   });
 
