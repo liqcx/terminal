@@ -1,4 +1,5 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * Идёт ли перечитывание превью, вызванное протуханием среза (`invalidateQueries`).
@@ -10,18 +11,29 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
  * цифру, и тусклить её на каждый такт нечего. `isFetching` без `isInvalidated`
  * — таймер, и цифры остаются яркими.
  *
- * Читается в рендере, на тот же `isFetching`, что и вызывающий: протухание
- * и старт перечитывания идут подряд, а завершение сбрасывает оба флага разом.
+ * Флаг читается подпиской на кэш запросов, а не в рендере: событие SDK во
+ * время идущего такта не меняет ни `fetchStatus`, ни `isStale`, рендера не
+ * будет, и строки остались бы яркими до чужого рендера.
  * Ключ должен совпадать с ключом хука `useOrderMarginPreview`; SDK пока не
  * отдаёт флаг `refreshing` сам — это следующий шаг на стороне SDK, после него
  * этот файл удаляется.
  */
-export function isInvalidationRefetch(
+export function useInvalidationRefetch(
   queryClient: QueryClient,
   key: QueryKey,
   isFetching: boolean,
   hasData: boolean,
 ): boolean {
-  if (!isFetching || !hasData) return false;
-  return queryClient.getQueryState(key)?.isInvalidated === true;
+  const cache = queryClient.getQueryCache();
+  // Ключ приходит новым массивом на каждый рендер; подписка от него не зависит,
+  // снимок — булево, ссылка не важна.
+  const subscribe = useCallback(
+    (notify: () => void) => cache.subscribe(notify),
+    [cache],
+  );
+  const invalidated = useSyncExternalStore(
+    subscribe,
+    () => queryClient.getQueryState(key)?.isInvalidated === true,
+  );
+  return isFetching && hasData && invalidated;
 }

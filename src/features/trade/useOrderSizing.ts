@@ -36,7 +36,7 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
-import { isInvalidationRefetch } from "./previewRefresh";
+import { useInvalidationRefetch } from "./previewRefresh";
 import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
 
@@ -195,23 +195,27 @@ export function useOrderSizing(params: {
   const queryClient = useQueryClient();
   const queryKeys = useLiqQueryKeys();
   const wallet = useWallet();
-  const refreshingOf = (
-    sizeDelta: bigint,
-    preview: { isFetching: boolean; data: unknown },
-  ): boolean =>
-    isInvalidationRefetch(
-      queryClient,
-      queryKeys.orderMarginPreview(
-        wallet ?? "",
-        previewAccount?.toString() ?? "none",
-        (market?.id ?? 0n).toString(),
-        sizeDelta.toString(),
-        priceForPreview.toString(),
-        "none",
-      ),
-      preview.isFetching,
-      preview.data !== undefined,
+  const previewKey = (sizeDelta: bigint) =>
+    queryKeys.orderMarginPreview(
+      wallet ?? "",
+      previewAccount?.toString() ?? "none",
+      (market?.id ?? 0n).toString(),
+      sizeDelta.toString(),
+      priceForPreview.toString(),
+      "none",
     );
+  const longRefreshing = useInvalidationRefetch(
+    queryClient,
+    previewKey(summary.long.sizeDelta),
+    longPreview.isFetching,
+    longPreview.data !== undefined,
+  );
+  const shortRefreshing = useInvalidationRefetch(
+    queryClient,
+    previewKey(summary.short.sizeDelta),
+    shortPreview.isFetching,
+    shortPreview.data !== undefined,
+  );
   // R0 — требование аккаунта до ордера. Есть только с данными: загрузка и
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
@@ -239,7 +243,7 @@ export function useOrderSizing(params: {
       liq: longPreview.data?.estimatedLiquidationPrice,
     },
     longPreview.isLoading,
-    refreshingOf(summary.long.sizeDelta, longPreview),
+    longRefreshing,
   );
   const short = useHeldPreview(
     heldKey,
@@ -248,7 +252,7 @@ export function useOrderSizing(params: {
       liq: shortPreview.data?.estimatedLiquidationPrice,
     },
     shortPreview.isLoading,
-    refreshingOf(summary.short.sizeDelta, shortPreview),
+    shortRefreshing,
   );
   const r1Long = long.r1;
   const r1Short = short.r1;

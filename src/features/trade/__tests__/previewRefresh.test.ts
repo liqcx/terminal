@@ -1,9 +1,50 @@
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { afterEach, describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { isInvalidationRefetch } from "../previewRefresh";
+import { useInvalidationRefetch } from "../previewRefresh";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 const KEY = ["liq", "account", 1, "0xabc", "orderMarginPreview", "1"] as const;
+
+let next: Promise<number>;
+let client: QueryClient;
+let root: Root;
+let container: HTMLDivElement;
+
+/** То, что делает useOrderSizing: isFetching/data от useQuery + флаг протухания. */
+function Probe() {
+  const q = useQuery({ queryKey: KEY, queryFn: () => next, staleTime: 5_000 });
+  const refreshing = useInvalidationRefetch(
+    client,
+    KEY,
+    q.isFetching,
+    q.data !== undefined,
+  );
+  return createElement(
+    "span",
+    { id: "out" },
+    `${q.isFetching ? "fetching" : "idle"}/${refreshing ? "refreshing" : "plain"}`,
+  );
+}
+
+const out = () => container.querySelector("#out")?.textContent;
+
+async function flush() {
+  for (let i = 0; i < 4; i += 1) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -11,81 +52,89 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-/** Живой запрос с данными и подписчиком: ровно то, что держит хук превью. */
-async function readyQuery() {
-  const client = new QueryClient();
-  let next: Promise<number> = Promise.resolve(1);
-  const observer = new QueryObserver(client, {
-    queryKey: KEY,
-    queryFn: () => next,
-    staleTime: 5_000,
+beforeEach(async () => {
+  next = Promise.resolve(1);
+  client = new QueryClient();
+  container = document.createElement("div");
+  root = createRoot(container);
+  act(() => {
+    root.render(
+      createElement(QueryClientProvider, { client }, createElement(Probe)),
+    );
   });
-  const unsubscribe = observer.subscribe(() => {});
-  await observer.refetch();
-  const read = () => ({
-    isFetching: client.isFetching({ queryKey: KEY }) > 0,
-    hasData: client.getQueryData(KEY) !== undefined,
-  });
-  return {
-    client,
-    observer,
-    read,
-    setNext: (p: Promise<number>) => (next = p),
-    unsubscribe,
-  };
-}
+  await flush();
+});
 
-let stop: (() => void) | undefined;
-afterEach(() => stop?.());
+afterEach(() => {
+  act(() => root.unmount());
+});
 
-describe("isInvalidationRefetch", () => {
+describe("useInvalidationRefetch", () => {
   it("перечитывание по таймеру (refetch без протухания) — не обновление, цифры яркие", async () => {
-    const q = await readyQuery();
-    stop = q.unsubscribe;
+    expect(out()).toBe("idle/plain");
     const gate = deferred<number>();
-    q.setNext(gate.promise);
-
-    const pending = q.observer.refetch();
-    const { isFetching, hasData } = q.read();
-    expect(isFetching).toBe(true);
-    expect(hasData).toBe(true);
-    expect(isInvalidationRefetch(q.client, KEY, isFetching, hasData)).toBe(false);
-
+    next = gate.promise;
+    await act(async () => {
+      void client.refetchQueries({ queryKey: KEY });
+    });
+    await flush();
+    expect(out()).toBe("fetching/plain");
     gate.resolve(2);
-    await pending;
+    await flush();
+    expect(out()).toBe("idle/plain");
   });
 
-  it("invalidateQueries по ключу — пока читается, это обновление; кончилось — нет", async () => {
-    const q = await readyQuery();
-    stop = q.unsubscribe;
+  it("invalidateQueries — пока читается, это обновление; кончилось — нет", async () => {
     const gate = deferred<number>();
-    q.setNext(gate.promise);
-
-    const invalidated = q.client.invalidateQueries({ queryKey: KEY });
-    const mid = q.read();
-    expect(mid.isFetching).toBe(true);
-    expect(isInvalidationRefetch(q.client, KEY, mid.isFetching, mid.hasData)).toBe(
-      true,
-    );
-
+    next = gate.promise;
+    await act(async () => {
+      void client.invalidateQueries({ queryKey: KEY });
+    });
+    await flush();
+    expect(out()).toBe("fetching/refreshing");
     gate.resolve(2);
-    await invalidated;
-    const done = q.read();
-    expect(done.isFetching).toBe(false);
-    expect(isInvalidationRefetch(q.client, KEY, done.isFetching, done.hasData)).toBe(
-      false,
-    );
-    // Флаг протухания сброшен успехом: следующий такт таймера снова яркий.
-    expect(q.client.getQueryState(KEY)?.isInvalidated).toBe(false);
+    await flush();
+    expect(out()).toBe("idle/plain");
+    expect(client.getQueryState(KEY)?.isInvalidated).toBe(false);
   });
 
-  it("чтение без данных — не обновление: показывать под пометкой нечего", () => {
-    const client = new QueryClient();
-    expect(isInvalidationRefetch(client, KEY, true, false)).toBe(false);
+  it("событие SDK во время идущего такта — рендер без rerender(): строки тускнеют", async () => {
+    const gate = deferred<number>();
+    next = gate.promise;
+    await act(async () => {
+      void client.refetchQueries({ queryKey: KEY });
+    });
+    await flush();
+    expect(out()).toBe("fetching/plain");
+
+    // Такт висит; протухание ставит только флаг: fetchStatus прежний.
+    // Ни одного rerender() — только то, что сам хук подписан на кэш.
+    act(() => {
+      client.getQueryCache().find({ queryKey: KEY })?.invalidate();
+    });
+    await flush();
+    expect(client.getQueryState(KEY)?.fetchStatus).toBe("fetching");
+    expect(out()).toBe("fetching/refreshing");
   });
 
-  it("нет запроса по ключу — не обновление", () => {
-    const client = new QueryClient();
-    expect(isInvalidationRefetch(client, KEY, true, true)).toBe(false);
+  it("чтение без данных — не обновление: показывать под пометкой нечего", async () => {
+    const fresh = new QueryClient();
+    const gate = deferred<number>();
+    next = gate.promise;
+    const c2 = document.createElement("div");
+    const r2 = createRoot(c2);
+    function P2() {
+      const q = useQuery({ queryKey: ["fresh"], queryFn: () => next });
+      return createElement(
+        "span",
+        { id: "o" },
+        String(useInvalidationRefetch(fresh, ["fresh"], q.isFetching, q.data !== undefined)),
+      );
+    }
+    await act(async () => {
+      r2.render(createElement(QueryClientProvider, { client: fresh }, createElement(P2)));
+    });
+    expect(c2.textContent).toBe("false");
+    act(() => r2.unmount());
   });
 });
