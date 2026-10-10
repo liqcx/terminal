@@ -13,15 +13,16 @@ import {
   validateOrder,
 } from "@liq/sdk";
 import {
-  useAccountDebtQuery,
   useDebounce,
+  useLiqQueryKeys,
   useMarginUsage,
   useOrderMarginPreview,
+  useWallet,
 } from "@liq/react";
 import { wadToFixed } from "@liq/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { useCollateralBalances } from "../account/useCollateralBalances";
 import type { MarketSummary } from "../market/useSelectedMarket";
 import { baseSymbolOf } from "../orderbook/bookView";
 import {
@@ -35,7 +36,7 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
-import { useAccountStateRefresh } from "./useAccountStateRefresh";
+import { useInvalidationRefetch } from "./previewRefresh";
 import { useHeldPreview } from "./useHeldPreview";
 import { ticketSummary, type TicketSummary } from "./ticketSummary";
 
@@ -113,8 +114,6 @@ export function useOrderSizing(params: {
   available: bigint;
   /** Шлюзовой `free` (`available − locked`, знаковый); `undefined` — не прочитан. */
   free: bigint | undefined;
-  /** Шлюзовой `locked`; `undefined` — не прочитан. Сбрасывает кэш превью при смене. */
-  locked: bigint | undefined;
   markPrice: bigint;
   /** Активная вкладка тикета. */
   tab: "Market" | "Limit";
@@ -126,7 +125,6 @@ export function useOrderSizing(params: {
     accountId,
     available,
     free,
-    locked,
     markPrice,
     tab,
     limitPrice,
@@ -190,15 +188,40 @@ export function useOrderSizing(params: {
     summary.short.sizeDelta,
     priceForPreview,
   );
+  // Тусклить цифры стоит на перечитывании после протухания среза (филл,
+  // депозит, вывод, погашение), а не на каждый такт 10-секундного таймера SDK.
+  // Ключ собран так же, как в `useOrderMarginPreview` (SDK 0.68); когда SDK
+  // отдаст флаг `refreshing` сам, этот код уходит.
+  const queryClient = useQueryClient();
+  const queryKeys = useLiqQueryKeys();
+  const wallet = useWallet();
+  const previewKey = (sizeDelta: bigint) =>
+    queryKeys.orderMarginPreview(
+      wallet ?? "",
+      previewAccount?.toString() ?? "none",
+      (market?.id ?? 0n).toString(),
+      sizeDelta.toString(),
+      priceForPreview.toString(),
+      "none",
+    );
+  const longRefreshing = useInvalidationRefetch(
+    queryClient,
+    previewKey(summary.long.sizeDelta),
+    longPreview.isFetching,
+    longPreview.data !== undefined,
+  );
+  const shortRefreshing = useInvalidationRefetch(
+    queryClient,
+    previewKey(summary.short.sizeDelta),
+    shortPreview.isFetching,
+    shortPreview.data !== undefined,
+  );
   // R0 — требование аккаунта до ордера. Есть только с данными: загрузка и
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
   const r0 = usage?.requiredInitialMargin;
-  // Кэш превью SDK сам не протухает при изменении счёта (филл — R0 и locked;
-  // депозит, вывод, погашение — коллатерал и долг), а R0 уже новый.
-  const { totalWad: collateral } = useCollateralBalances();
-  const { data: debt } = useAccountDebtQuery();
-  useAccountStateRefresh(accountId, { r0, locked, collateral, debt });
+  // Кэш превью сбрасывает сам SDK (0.68): срез кошелька протухает от
+  // `orderSettled` / `deposited` / `withdrawn` / `repaid` и перечитывается раз в 10 с.
   // R1 — требование всего аккаунта после ордера. `data` есть только у
   // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
   // смены размера, рынка или аккаунта прежнее значение не доживает до новой
@@ -220,7 +243,7 @@ export function useOrderSizing(params: {
       liq: longPreview.data?.estimatedLiquidationPrice,
     },
     longPreview.isLoading,
-    longPreview.isFetching && longPreview.data !== undefined,
+    longRefreshing,
   );
   const short = useHeldPreview(
     heldKey,
@@ -229,7 +252,7 @@ export function useOrderSizing(params: {
       liq: shortPreview.data?.estimatedLiquidationPrice,
     },
     shortPreview.isLoading,
-    shortPreview.isFetching && shortPreview.data !== undefined,
+    shortRefreshing,
   );
   const r1Long = long.r1;
   const r1Short = short.r1;
