@@ -30,6 +30,14 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Node ≥ 25 включает Web Storage по умолчанию: `globalThis.localStorage` —
+    // собственный аксессор, без `--localstorage-file` он читается как
+    // `undefined`. Vitest копирует ключи окна jsdom на глобал, только если их
+    // там нет (или ключ в его фиксированном списке — `Storage` в нём, а
+    // `localStorage` нет), поэтому хранилище jsdom не доезжает и
+    // `localStorage.clear()` в тестах с `@vitest-environment jsdom` падает на
+    // `undefined`. Выключенная фича Node в воркерах пропускает его.
+    execArgv: ["--no-experimental-webstorage"],
     // `@liq/react` тянет `@turnkey/react-wallet-kit`, чей файл с нестандартным
     // расширением не переваривает загрузчик Node: инлайн отдаёт его Vite.
     server: { deps: { inline: [/@turnkey\//, /@liqpro\//] } },
