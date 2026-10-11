@@ -40,27 +40,39 @@ interface PositionActions {
   closing: boolean;
 }
 
-/** Подпись колонки «Req. margin» в меню видимости колонок (заголовок там не строка). */
-const COLUMN_LABELS = { margin: "Req. margin" };
+/**
+ * Подписи колонок с подсказкой в меню видимости колонок (заголовок там не
+ * строка, а компонент).
+ */
+const COLUMN_LABELS = { entry: "Entry Price", margin: "Req. margin" };
 
 /** Что значит число в колонке — для подсказки заголовка. */
 const REQ_MARGIN_NOTE =
   "Initial margin the protocol requires for this position alone — grows with position size; the account-level liquidation reward is not included";
 
 /**
+ * Цена входа — протокольная: при любом изменении размера (добавка, частичное
+ * закрытие) база переносится на цену филла, а PnL закрытой части уже
+ * реализован на счёт. Без подсказки это читается как «цена входа подменилась»
+ * (TRM-19, решение владельца d от 06.10).
+ */
+const ENTRY_PRICE_NOTE =
+  "Protocol entry price: it moves to the latest fill price whenever the position size changes (an add or a partial close). PnL of a closed part is realized to the account at that fill, so Unrealized PnL counts from this price.";
+
+/**
  * Заголовок колонки с подсказкой. Провайдер свой: таблица стоит вне
  * `MarketHeader`, где живёт общий.
  */
-function ReqMarginHeader() {
+function HintHeader(props: { label: string; note: string; testid: string }) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-help" data-testid="positions-req-margin-header">
-            Req. margin
+          <span className="cursor-help" data-testid={props.testid}>
+            {props.label}
           </span>
         </TooltipTrigger>
-        <TooltipContent>{REQ_MARGIN_NOTE}</TooltipContent>
+        <TooltipContent>{props.note}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -109,7 +121,13 @@ const columns = helper.columns([
   }),
   helper.accessor((r) => Number(r.position.entryPrice), {
     id: "entry",
-    header: "Entry Price",
+    header: () => (
+      <HintHeader
+        label={COLUMN_LABELS.entry}
+        note={ENTRY_PRICE_NOTE}
+        testid="positions-entry-header"
+      />
+    ),
     cell: (info) => fmtPrice(info.row.original.position.entryPrice),
   }),
   helper.accessor((r) => Number(r.markPrice ?? 0n), {
@@ -132,7 +150,13 @@ const columns = helper.columns([
   }),
   helper.accessor((r) => Number(r.position.initialMarginUsd ?? 0n), {
     id: "margin",
-    header: () => <ReqMarginHeader />,
+    header: () => (
+      <HintHeader
+        label={COLUMN_LABELS.margin}
+        note={REQ_MARGIN_NOTE}
+        testid="positions-req-margin-header"
+      />
+    ),
     // `undefined` — «маржа позиции не известна»: ноль читался бы как «ничего не
     // требуется». Сортировка при этом ставит неизвестное вместе с нулём.
     cell: (info) => {
