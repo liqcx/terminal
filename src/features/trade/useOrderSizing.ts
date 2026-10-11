@@ -38,7 +38,7 @@ import {
 } from "./orderMarginView";
 import { useInvalidationRefetch } from "./previewRefresh";
 import { useHeldPreview } from "./useHeldPreview";
-import { ticketSummary, type TicketSummary } from "./ticketSummary";
+import { ticketPrice, ticketSummary, type TicketSummary } from "./ticketSummary";
 
 export type SizeUnit = "base" | "usd";
 
@@ -82,13 +82,13 @@ type OrderSizing = {
 function parseSizeInput(
   sizeStr: string,
   unit: SizeUnit,
-  markPrice: bigint,
+  price: bigint,
 ): bigint {
   if (!sizeStr) return 0n;
   try {
     if (unit === "base") return Qty.parse(sizeStr);
-    return markPrice > 0n
-      ? usdToSize(Usd.parse(sizeStr), Price(markPrice))
+    return price > 0n
+      ? usdToSize(Usd.parse(sizeStr), Price(price))
       : 0n;
   } catch {
     return 0n;
@@ -147,15 +147,19 @@ export function useOrderSizing(params: {
   // утверждение о рынке.
   const baseDecimals = 4;
 
-  const sizeQty = parseSizeInput(sizeStr, unit, markPrice);
+  // Размер ⇄ доллары — по цене вкладки: на Limit это введённая цена, и Order
+  // value, ввод в USD и потолок по плечу считают то, что ордер реально
+  // запросит (TRM-36). Превью и вердикт ниже берут свои цены сами.
+  const sizePrice = ticketPrice({ tab, mark: markPrice, limit: limitPrice });
+  const sizeQty = parseSizeInput(sizeStr, unit, sizePrice);
   const maxSize = sizeFromLeverage({
     availableUsd: Usd(available),
     leverage,
-    markPrice: Price(markPrice),
+    markPrice: Price(sizePrice),
   });
   const summary = ticketSummary({
     sizeQty: Qty(sizeQty),
-    markPrice: Price(markPrice),
+    price: Price(sizePrice),
   });
   const notional = summary.value;
 
@@ -290,15 +294,15 @@ export function useOrderSizing(params: {
     if (sizeWad <= 0n) return "";
     return u === "base"
       ? wadToFixed(sizeWad, baseDecimals)
-      : markPrice > 0n
-        ? wadToFixed(sizeToUsd(Qty(sizeWad), Price(markPrice)), 2)
+      : sizePrice > 0n
+        ? wadToFixed(sizeToUsd(Qty(sizeWad), Price(sizePrice)), 2)
         : "";
   }
 
   // Typed size is authoritative; re-derive the slider position from it.
   function setSizeStr(v: string) {
     setSizeStrRaw(v);
-    setPctRaw(sizeToPct(Qty(parseSizeInput(v, unit, markPrice)), maxSize));
+    setPctRaw(sizeToPct(Qty(parseSizeInput(v, unit, sizePrice)), maxSize));
   }
 
   // Chosen percentage is authoritative; rewrite the size to match.
@@ -316,7 +320,7 @@ export function useOrderSizing(params: {
       const nextMax = sizeFromLeverage({
         availableUsd: Usd(available),
         leverage: l,
-        markPrice: Price(markPrice),
+        markPrice: Price(sizePrice),
       });
       setSizeStrRaw(fmtForUnit(pctToSize(pct, nextMax), unit));
     }
@@ -324,9 +328,9 @@ export function useOrderSizing(params: {
 
   function setUnit(next: SizeUnit) {
     if (next === unit) return;
-    // Without a mark price there is no base⇄USD conversion — switching would
+    // Without a price there is no base⇄USD conversion — switching would
     // format to "" and silently drop the typed size. No-op until price loads.
-    if (markPrice <= 0n) return;
+    if (sizePrice <= 0n) return;
     setSizeStrRaw(fmtForUnit(sizeQty, next));
     setUnitRaw(next);
   }

@@ -10,7 +10,7 @@ deposit → sign & submit orders → watch live updates**. Single-market, neutra
 
 ## Quickstart
 
-**Prereqs:** Node 24 + pnpm 11 (`proto use`), a browser wallet (MetaMask), and testnet funds
+**Prereqs:** Node 26 + pnpm 11 (`proto use`), a browser wallet (MetaMask), and testnet funds
 (chainId 6343). The SDK (`@liqpro/*`) installs from public npm — no registry token needed.
 
 1. **Configure the backend.**

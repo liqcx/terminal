@@ -65,6 +65,16 @@ test.describe("positions", () => {
       "Initial margin the protocol requires for this position alone — grows with position size; the account-level liquidation reward is not included",
     );
 
+    // Цена входа протокольная и переносится на филл при смене размера (TRM-19):
+    // заголовок говорит это подсказкой, текст колонки прежний.
+    const entryHeader = page.getByTestId("table-header-entry");
+    await expect(entryHeader).toHaveText("Entry Price");
+    await page.keyboard.press("Escape");
+    await entryHeader.getByTestId("positions-entry-header").hover();
+    await expect(page.getByRole("tooltip").first()).toContainText(
+      "it moves to the latest fill price whenever the position size changes",
+    );
+
     // Плечо позиции (TRM-12: notional / available аккаунта) не показывается:
     // в ячейке стороны остаётся одно слово.
     await expect(
