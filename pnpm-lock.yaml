@@ -75,6 +75,9 @@ importers:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.2.15)(react@19.2.6)(use-sync-external-store@1.4.0(react@19.2.6))
     devDependencies:
+      '@alxwlw/repo-rules':
+        specifier: 1.6.0
+        version: 1.6.0
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.4.1(jiti@2.7.0))
@@ -137,6 +140,11 @@ packages:
 
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
+
+  '@alxwlw/repo-rules@1.6.0':
+    resolution: {integrity: sha512-CnofWzNFZvPTF1bIAJ4laeM5Ytq2CGxKbvl3XThpG2+TyeT+6TF8sPdSJg4DvSQ7eBaP1dJRYlvosy1CShlrLw==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@asamuzakjp/css-color@6.0.7':
     resolution: {integrity: sha512-vC/bk1Lz7Tn/EfU9/apOTBk80/8dyGyWMowPoV1tJ52muDGsDqt2HPT2klrFUiY60MQmQv9q8yIht15JnBgDGw==}
@@ -4629,6 +4637,8 @@ snapshots:
   '@adraffy/ens-normalize@1.10.1': {}
 
   '@adraffy/ens-normalize@1.11.1': {}
+
+  '@alxwlw/repo-rules@1.6.0': {}
 
   '@asamuzakjp/css-color@6.0.7':
     dependencies:
