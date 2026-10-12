@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "rules": {
+    "max-lines": {
+      "e2e/support/world.ts": 914
+    },
+    "number-or-default": {
+      "playwright.config.ts": 1
+    }
+  }
+}
