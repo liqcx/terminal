@@ -621,9 +621,13 @@ test.describe("смена плеча не трогает размер (TRM-26)",
     const { trade } = await enterTerminal(page, world);
     await trade.setSizeUnit("usd");
     await trade.setSize("500");
+    // 500 USD = 0.00714 базы при марке 70 000; потолок 2x = 0.1429 → 5%.
+    await expect(trade.sizePctValue).toHaveText("5%");
 
     await trade.setLeverage(5);
     await expect(trade.sizeInput).toHaveValue("500");
+    // Потолок 5x = 0.3571 → 2%: процент пересчитан и в USD.
+    await expect(trade.sizePctValue).toHaveText("2%");
   });
 
   test("пустой размер плечо не заполняет", async ({ page, world }) => {
