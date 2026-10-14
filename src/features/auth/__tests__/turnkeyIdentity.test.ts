@@ -25,7 +25,11 @@ const reconnect = vi.fn();
 const removeQueries = vi.fn();
 const clearToken = vi.fn();
 
-let turnkey = { authState: "authenticated", session: { organizationId: "sub-1" } };
+let turnkey = {
+  authState: "authenticated",
+  session: { organizationId: "sub-1" } as { organizationId: string } | undefined,
+  clientState: "ready" as string | undefined,
+};
 let wagmi = {
   address: undefined as string | undefined,
   isConnected: false,
@@ -135,7 +139,7 @@ beforeEach(() => {
     address: "0xwallet",
     account: { signMessage: vi.fn(async () => "0xsig") },
   }));
-  turnkey = { authState: "authenticated", session: { organizationId: "sub-1" } };
+  turnkey = { authState: "authenticated", session: { organizationId: "sub-1" }, clientState: "ready" };
   wagmi = { address: undefined, isConnected: false, isConnecting: false, isReconnecting: false };
   gatewayToken = null;
   seen.value = null;
@@ -180,7 +184,7 @@ describe("подписант суб-организации", () => {
       address: "0xsecond",
       account: { signMessage: vi.fn(async () => "0xsig2") },
     }));
-    turnkey = { authState: "authenticated", session: { organizationId: "sub-2" } };
+    turnkey = { authState: "authenticated", session: { organizationId: "sub-2" }, clientState: "ready" };
     render();
     await settle();
 
@@ -220,6 +224,27 @@ describe("подписант суб-организации", () => {
     await settle();
     expect(createEmbeddedWallet).toHaveBeenCalledTimes(2);
     expect(seen.value?.embedded).toEqual({ kind: "ready", address: "0xwallet" });
+  });
+
+  it("пока кит восстанавливает сессию, личность помечена restoring", async () => {
+    turnkey = {
+      authState: "unauthenticated",
+      session: undefined,
+      clientState: "loading",
+    };
+    render();
+    await settle();
+    expect(seen.value?.subOrgId).toBeNull();
+    expect(seen.value?.restoring).toBe(true);
+
+    turnkey = {
+      authState: "authenticated",
+      session: { organizationId: "sub-1" },
+      clientState: "ready",
+    };
+    render();
+    await settle();
+    expect(seen.value?.restoring).toBe(false);
   });
 
   it("пока личности нет, наружу отдаётся idle, а не «разрешаем»", async () => {
@@ -266,7 +291,7 @@ describe("гигиена сессии", () => {
   it("смена личности роняет токен и приватные кэши", async () => {
     render();
     await settle();
-    turnkey = { authState: "authenticated", session: { organizationId: "sub-2" } };
+    turnkey = { authState: "authenticated", session: { organizationId: "sub-2" }, clientState: "ready" };
     render();
     await settle();
     expect(clearToken).toHaveBeenCalled();

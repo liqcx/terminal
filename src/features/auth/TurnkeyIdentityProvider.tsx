@@ -25,6 +25,7 @@ import { useAccount, useConnect, useReconnect } from "wagmi";
 
 import { megaethTestnet } from "../../config/chain";
 import { env } from "../../config/env";
+import { turnkeyRestoring } from "./bootGate";
 import { identityResetReason } from "./identityReset";
 
 /** Куда дошло разрешение встроенного кошелька — для тех, кто это показывает. */
@@ -38,6 +39,11 @@ type TurnkeyIdentityValue = {
   /** subOrgId текущей личности; `null`, пока не вошли. */
   subOrgId: string | null;
   embedded: EmbeddedWalletState;
+  /**
+   * Кит Turnkey ещё восстанавливает сохранённую сессию: `subOrgId === null`
+   * в это окно не значит «не вошли» (см. `turnkeyRestoring`).
+   */
+  restoring: boolean;
   /** Переоткрыть упавшее разрешение — по клику, не автоматически. */
   retryResolve: () => void;
 };
@@ -83,7 +89,7 @@ export function useTurnkeyIdentity(): TurnkeyIdentityValue {
  * `<LiqProvider>` / `<WagmiProvider>` (нужны ступень сессии и `useConnect`).
  */
 export function TurnkeyIdentityProvider({ children }: { children: ReactNode }) {
-  const { authState, session } = useTurnkey();
+  const { authState, session, clientState } = useTurnkey();
   const wagmiAccount = useAccount();
   const token = useGatewayStore((s) => s.token);
   const queryClient = useQueryClient();
@@ -206,9 +212,10 @@ export function TurnkeyIdentityProvider({ children }: { children: ReactNode }) {
     return {
       subOrgId,
       embedded: embeddedView,
+      restoring: turnkeyRestoring(clientState),
       retryResolve: () => void embedded.refetch(),
     };
-  }, [subOrgId, address, embedded]);
+  }, [subOrgId, address, embedded, clientState]);
 
   return (
     <TurnkeyIdentityContext.Provider value={value}>
