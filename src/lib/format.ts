@@ -27,10 +27,25 @@ export function fmtSignedPct(ratio: bigint): string {
   return (ratio < 0n ? "" : "+") + formatRatio(ratio);
 }
 
-/** WAD-плечо: «10x», «3.5x». Целое печатается без дробной части. */
+/**
+ * WAD-плечо: «0.00x», «3.50x», «10.00x» — всегда два знака.
+ *
+ * @remarks Одно написание на экран: карточка счёта и Overview печатали одно и
+ * то же значение по-разному («0.00» и «0x», TRM-16).
+ */
 export function fmtLeverage(wad: bigint): string {
-  return `${Number(wadToNumber(wad).toFixed(1))}x`;
+  return `${wadToNumber(wad).toFixed(2)}x`;
 }
+
+/**
+ * Подпись при `available: false` у портфеля шлюза.
+ *
+ * @remarks Флаг значит «сабграф не ответил, история депозитов и выводов не
+ * прочитана», а не «депозиты и выводы недоступны»: кнопки Deposit / Withdraw от
+ * него не зависят и работают. Прежняя подпись читалась как запрет вывода (TRM-16).
+ */
+export const EVENTS_UNAVAILABLE =
+  "Deposit and withdrawal history is unavailable right now";
 
 /** Unix-миллисекунды → «02.09 14:35» в локали пользователя. */
 export function fmtTime(ms: number): string {

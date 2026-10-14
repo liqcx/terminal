@@ -1,8 +1,8 @@
-import { formatUsd, wadToNumber } from "@liq/core";
+import { formatUsd } from "@liq/core";
 
 import { Card } from "@/components/ui/card";
 
-import { DASH, fmtSignedUsd } from "../../lib/format";
+import { DASH, fmtLeverage, fmtSignedUsd } from "../../lib/format";
 import { useAccountSummary } from "./useAccountSummary";
 
 export function AccountPanel() {
@@ -57,7 +57,7 @@ export function AccountPanel() {
           value={
             summary.leverage === undefined
               ? DASH
-              : wadToNumber(summary.leverage).toFixed(2)
+              : fmtLeverage(summary.leverage)
           }
         />
       </div>

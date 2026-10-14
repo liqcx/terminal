@@ -31,9 +31,11 @@ describe("обёртки над форматтерами SDK", () => {
     expect(fmtSignedPct((-5n * WAD) / 100n)).toBe("-5.00%");
   });
 
-  it("fmtLeverage: целое без дроби, дробное до десятых", () => {
-    expect(fmtLeverage(10n * WAD)).toBe("10x");
-    expect(fmtLeverage((35n * WAD) / 10n)).toBe("3.5x");
+  it("fmtLeverage: всегда два знака — как в карточке счёта и позициях", () => {
+    expect(fmtLeverage(0n)).toBe("0.00x");
+    expect(fmtLeverage(WAD / 2n)).toBe("0.50x");
+    expect(fmtLeverage((35n * WAD) / 10n)).toBe("3.50x");
+    expect(fmtLeverage(10n * WAD)).toBe("10.00x");
   });
 
   it("parseOrZero: пусто и мусор — ноль, число — число", () => {

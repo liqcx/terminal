@@ -130,6 +130,9 @@ test.describe("страница Account", () => {
     await expect(
       page.getByTestId("recent-activity-events-unavailable"),
     ).toBeVisible();
+    await expect(
+      page.getByTestId("recent-activity-events-unavailable"),
+    ).toHaveText("Deposit and withdrawal history is unavailable right now");
     // Депозит из портфеля пропал вместе с сабграфом, расчёт леджера остался —
     // «неизвестно» не стирает то, что известно.
     await expect(account.activityRows).toHaveCount(1);
@@ -138,6 +141,9 @@ test.describe("страница Account", () => {
     await expect(
       page.getByTestId("transactions-events-unavailable"),
     ).toBeVisible();
+    await expect(
+      page.getByTestId("transactions-events-unavailable"),
+    ).toHaveText("Deposit and withdrawal history is unavailable right now");
     await account.select("transactions-period", "all");
     await expect(account.transactionRows).toHaveCount(1);
   });
