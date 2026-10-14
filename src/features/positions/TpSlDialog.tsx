@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { parseOrZero } from "../../lib/format";
+import { parseOrZero, priceDecimals } from "../../lib/format";
 import { DecimalInput } from "../../components/ui/DecimalInput";
 import { isCapped } from "../orders/cappedSizes";
 import type { PositionRow } from "./usePositionRows";
@@ -48,14 +48,18 @@ export function TpSlDialog({
 }) {
   const accountId = useAccountId();
   const applyBrackets = useApplyBracketsMutation(accountId);
+  // Знаков в полях цены — по марку позиции (TRM-32); им же предзаполнены
+  // текущие триггеры, иначе 1.5015 в поле стал бы «1.50» и «Save» без правки
+  // молча сдвинул бы скобку.
+  const decimals = priceDecimals(row.markPrice ?? 0n);
   const [tp, setTp] = useState(() =>
     row.brackets.takeProfit
-      ? wadToFixed(row.brackets.takeProfit.triggerPrice, 2)
+      ? wadToFixed(row.brackets.takeProfit.triggerPrice, decimals)
       : "",
   );
   const [sl, setSl] = useState(() =>
     row.brackets.stopLoss
-      ? wadToFixed(row.brackets.stopLoss.triggerPrice, 2)
+      ? wadToFixed(row.brackets.stopLoss.triggerPrice, decimals)
       : "",
   );
 
@@ -129,7 +133,7 @@ export function TpSlDialog({
         <DecimalInput
           value={tp}
           onValueChange={setTp}
-          maxDecimals={2}
+          maxDecimals={decimals}
           placeholder="0.00"
           data-testid="tpsl-tp-input"
         />
@@ -140,7 +144,7 @@ export function TpSlDialog({
         <DecimalInput
           value={sl}
           onValueChange={setSl}
-          maxDecimals={2}
+          maxDecimals={decimals}
           placeholder="0.00"
           data-testid="tpsl-sl-input"
         />

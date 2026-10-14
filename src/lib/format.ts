@@ -1,4 +1,10 @@
-import { formatPrice, formatRatio, formatUsd, wadToNumber } from "@liq/core";
+import {
+  formatPrice,
+  formatRatio,
+  formatUsd,
+  suggestDecimalsFor,
+  wadToNumber,
+} from "@liq/core";
 
 /**
  * Здесь только то, чего нет в `@liq/core`: деньги, количества, разбор WAD и
@@ -10,11 +16,44 @@ import { formatPrice, formatRatio, formatUsd, wadToNumber } from "@liq/core";
 export const DASH = "—";
 
 /**
+ * Знаков после запятой у цены — по её величине, но не меньше двух.
+ *
+ * @remarks Шага цены у рынка нет нигде в контуре (`MarketSummary` без
+ * `tickSize`), поэтому точность выводится из самой цены: два знака на XRP
+ * (≈ $1.50) — это шаг ≈ 0.67 %, Entry 1.5015 печатался «1.5» (TRM-32). Пол в два
+ * знака держит дорогие рынки как были: `suggestDecimalsFor` для ≥ 100 000
+ * отдаёт ноль, и BTC потерял бы центы.
+ */
+export function priceDecimals(price: bigint): number {
+  const abs = price < 0n ? -price : price;
+  return Math.max(2, suggestDecimalsFor(wadToNumber(abs)));
+}
+
+/**
  * Цена в таблицах и шапке: без `$` (валюту называет заголовок колонки) и без
- * обязательных копеек — «69,900», а не «$69,900.00».
+ * обязательных копеек — «69,900», «1.5015», а не «$69,900.00».
  */
 export function fmtPrice(v: bigint): string {
-  return formatPrice(v, { sign: "", minDecimals: 0 });
+  return formatPrice(v, {
+    sign: "",
+    minDecimals: 0,
+    maxDecimals: priceDecimals(v),
+  });
+}
+
+/**
+ * Формат цены серии lightweight-charts по цене рынка.
+ *
+ * @remarks По умолчанию у серии `precision: 2, minMove: 0.01` — на XRP шкала
+ * шла шагом 0.02 и метка текущей цены была «1.50» (TRM-32).
+ */
+export function chartPriceFormat(price: number): {
+  type: "price";
+  precision: number;
+  minMove: number;
+} {
+  const precision = Math.max(2, suggestDecimalsFor(Math.abs(price)));
+  return { type: "price", precision, minMove: 10 ** -precision };
 }
 
 /** «+$12.34» / «-$12.34»: SDK ставит только минус, плюс дописывается здесь. */

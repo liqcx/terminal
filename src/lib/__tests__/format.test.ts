@@ -2,6 +2,7 @@ import { Price } from "@liq/sdk";
 import { describe, expect, it } from "vitest";
 
 import {
+  chartPriceFormat,
   fmtLeverage,
   fmtPctNum,
   fmtPrice,
@@ -11,6 +12,7 @@ import {
   fmtSignedUsdNum,
   fmtUsdNum,
   parseOrZero,
+  priceDecimals,
 } from "@/lib/format";
 
 const WAD = 10n ** 18n;
@@ -19,6 +21,36 @@ describe("обёртки над форматтерами SDK", () => {
   it("fmtPrice: без `$`, без обязательных копеек, с разрядами", () => {
     expect(fmtPrice(69_900n * WAD)).toBe("69,900");
     expect(fmtPrice((12_345n * WAD) / 10n)).toBe("1,234.5");
+  });
+
+  it("priceDecimals: не меньше двух, мелкой цене — больше", () => {
+    expect(priceDecimals(0n)).toBe(2);
+    expect(priceDecimals(112_345n * WAD)).toBe(2); // BTC — как раньше, не 0
+    expect(priceDecimals(2_693n * WAD)).toBe(2); // ETH
+    expect(priceDecimals(119n * WAD)).toBe(2); // SOL
+    expect(priceDecimals(15n * WAD)).toBe(3);
+    expect(priceDecimals((15_015n * WAD) / 10_000n)).toBe(4); // XRP 1.5015
+    expect(priceDecimals((-15_015n * WAD) / 10_000n)).toBe(4); // знак не важен
+  });
+
+  it("fmtPrice: XRP с четырьмя знаками, дорогие рынки — как раньше", () => {
+    expect(fmtPrice((15_015n * WAD) / 10_000n)).toBe("1.5015");
+    expect(fmtPrice((15n * WAD) / 10n)).toBe("1.5");
+    expect(fmtPrice(69_900n * WAD)).toBe("69,900");
+    expect(fmtPrice((26_935n * WAD) / 10n)).toBe("2,693.5");
+  });
+
+  it("chartPriceFormat: точность и шаг шкалы по цене", () => {
+    expect(chartPriceFormat(1.5015)).toEqual({
+      type: "price",
+      precision: 4,
+      minMove: 0.0001,
+    });
+    expect(chartPriceFormat(2693.5)).toEqual({
+      type: "price",
+      precision: 2,
+      minMove: 0.01,
+    });
   });
 
   it("fmtSignedUsd: плюс дописан, минус от SDK", () => {

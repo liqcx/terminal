@@ -16,6 +16,7 @@ export function EntryTpSlFields({
   sl,
   setSl,
   note,
+  priceDecimals,
 }: {
   enabled: boolean;
   tp: string;
@@ -24,6 +25,8 @@ export function EntryTpSlFields({
   setSl: (v: string) => void;
   /** Что сказать под полями: подсказка о стороне или причина отказа. */
   note: { text: string; bad: boolean } | null;
+  /** Знаков в полях цены — по марку рынка (TRM-32). */
+  priceDecimals: number;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -36,7 +39,7 @@ export function EntryTpSlFields({
             <DecimalInput
               value={tp}
               onValueChange={setTp}
-              maxDecimals={2}
+              maxDecimals={priceDecimals}
               placeholder="0.00"
               data-testid="entry-tp-input"
             />
@@ -48,7 +51,7 @@ export function EntryTpSlFields({
             <DecimalInput
               value={sl}
               onValueChange={setSl}
-              maxDecimals={2}
+              maxDecimals={priceDecimals}
               placeholder="0.00"
               data-testid="entry-sl-input"
             />

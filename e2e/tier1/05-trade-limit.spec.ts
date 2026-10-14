@@ -2,6 +2,7 @@ import { Price } from "@liq/sdk";
 
 import { enterTerminal } from "../pages/flows";
 import { expect, test } from "../support/fixtures";
+import { WAD } from "../support/constants";
 import { readyWorld } from "../support/world";
 
 test.describe("limit orders", () => {
@@ -20,6 +21,28 @@ test.describe("limit orders", () => {
     await expect.poll(() => world.submittedOrders.length).toBeGreaterThan(0);
     expect(world.submittedOrders.at(-1)?.limitPrice).toBe(
       Price.parse("70000").toString(),
+    );
+  });
+
+  test("на дешёвом рынке цена вводится и печатается с четырьмя знаками", async ({
+    page,
+    world,
+  }) => {
+    const { trade, market } = await enterTerminal(page, world, () =>
+      readyWorld({ price: (15_015n * WAD) / 10_000n }),
+    );
+
+    await expect(market.price).toHaveText("$1.5015");
+
+    await trade.selectTab("limit");
+    await trade.setSize("10");
+    await trade.setLimitPrice("1.4123");
+    await expect(trade.limitPriceInput).toHaveValue("1.4123");
+    await trade.submit();
+
+    await expect.poll(() => world.submittedOrders.length).toBeGreaterThan(0);
+    expect(world.submittedOrders.at(-1)!.limitPrice).toBe(
+      Price.parse("1.4123").toString(),
     );
   });
 

@@ -29,7 +29,7 @@ import { useEffect, useState } from "react";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { parseOrZero } from "../../lib/format";
+import { parseOrZero, priceDecimals } from "../../lib/format";
 import { mergeById } from "../orders/mergeById";
 import { SessionCta } from "../auth/SessionCta";
 import { useSelectedMarket } from "../market/useSelectedMarket";
@@ -52,15 +52,6 @@ type Tab = (typeof TABS)[number];
 
 const SLIPPAGE_BPS = Bps(50n); // 0.5%
 
-/**
- * Знаков после запятой в поле лимитной цены.
- *
- * @remarks Одно число на два места: сам `DecimalInput` и мост из книги, который
- * режет под него `Price.fmt`. Разойдясь, они дадут поле, молча отбрасывающее
- * то, что мост в него положил, — и ни один тест этого не увидит.
- */
-const LIMIT_PRICE_DECIMALS = 2;
-
 /** Стабильные пустышки: новый литерал на каждый рендер гонял бы мемо впустую. */
 const EMPTY_ORDERS: NonNullable<
   ReturnType<typeof useConditionalOrders>["data"]
@@ -74,6 +65,10 @@ export function TradeForm() {
   const accountId = useAccountId();
   const stage = useSessionStage();
   const markPrice = useMarkPrice();
+  // Знаков в полях цены — по марку рынка (TRM-32). Одно число на три места:
+  // поле лимитной цены, мост из книги и кнопку MID; разойдясь, они дадут поле,
+  // молча отбрасывающее то, что мост в него положил.
+  const priceInputDecimals = priceDecimals(markPrice);
   const mid = useBookMid();
   const { data: margins } = useAvailableMarginQuery();
 
@@ -116,10 +111,12 @@ export function TradeForm() {
         // `Price.fmt` не режет дробную часть под поле — обрезаем на входе
         // в поле, а не в сторе (стор хранит цену бренда).
         setLimitPrice(
-          sanitizeDecimal(Price.fmt(s.limitPrice), LIMIT_PRICE_DECIMALS),
+          sanitizeDecimal(Price.fmt(s.limitPrice), priceInputDecimals),
         );
       }),
-    [],
+    // Точность в зависимостях: подписка с точностью первого рендера, до загрузки
+    // марка, резала бы цену из книги по двум знакам и на XRP (TRM-32).
+    [priceInputDecimals],
   );
 
   // The active tab's price field, parsed (0n = blank/unparseable). Market —
@@ -394,11 +391,11 @@ export function TradeForm() {
             onMid={() => {
               if (mid === null) return;
               setLimitPrice(
-                sanitizeDecimal(Price.fmt(Price(mid)), LIMIT_PRICE_DECIMALS),
+                sanitizeDecimal(Price.fmt(Price(mid)), priceInputDecimals),
               );
             }}
             midDisabled={mid === null}
-            maxDecimals={LIMIT_PRICE_DECIMALS}
+            maxDecimals={priceInputDecimals}
           />
         )}
 
@@ -437,6 +434,7 @@ export function TradeForm() {
           sl={sl}
           setSl={setSl}
           note={bracketsNote()}
+          priceDecimals={priceInputDecimals}
         />
       </div>
 
