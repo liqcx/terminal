@@ -29,6 +29,15 @@ const QUOTE = "USD";
 const GRID = "grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-2";
 
 /**
+ * Минимальная ширина таблицы рынков.
+ *
+ * @remarks Шесть колонок не сжимаются в 360 px телефона без потери смысла, а
+ * обрезка прятала Change, Volume и звезду совсем (TRM-33). Ниже этой ширины
+ * таблица прокручивается вбок целиком — шапка вместе со строками.
+ */
+const TABLE_MIN_W = "min-w-[600px]";
+
+/**
  * Кружок с буквой вместо логотипа.
  *
  * @remarks Источника иконок токенов в репозитории нет, а карта символов молча
@@ -97,7 +106,7 @@ export function MarketSearch() {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[680px] p-0"
+        className="w-[min(680px,calc(100vw-1rem))] p-0"
         data-testid="market-search-popover"
       >
         <Command>
@@ -131,68 +140,72 @@ export function MarketSearch() {
               Favorites
             </button>
           </div>
-          <div
-            className={`${GRID} border-b border-border px-3 py-1 text-[10px] text-muted`}
-          >
-            <span>Pair</span>
-            <span className="text-right">Last Price</span>
-            <span className="text-right">Change</span>
-            <span className="text-right">Volume</span>
-            <span className="text-right">Market Cap</span>
-            <span />
-          </div>
-          <CommandList>
-            <CommandEmpty>No markets.</CommandEmpty>
-            <CommandGroup>
-              {shown.map((row) => (
-                <CommandItem
-                  key={row.id.toString()}
-                  value={row.symbol}
-                  data-testid={`market-row-${row.id}`}
-                  onSelect={() => pick(row)}
-                  className={GRID}
-                >
-                  <span className="flex items-center gap-2">
-                    <Monogram symbol={row.symbol} />
-                    <span className="font-semibold text-text">
-                      {row.symbol}
-                    </span>
-                    <span className="text-muted">{QUOTE}</span>
-                    {row.maxLeverage !== null && (
-                      <span className="rounded border border-border px-1 text-[10px] text-muted">
-                        {row.maxLeverage}x
+          <div className="overflow-x-auto" data-testid="market-search-scroll">
+            <div className={TABLE_MIN_W}>
+              <div
+                className={`${GRID} border-b border-border px-3 py-1 text-[10px] text-muted`}
+              >
+                <span>Pair</span>
+                <span className="text-right">Last Price</span>
+                <span className="text-right">Change</span>
+                <span className="text-right">Volume</span>
+                <span className="text-right">Market Cap</span>
+                <span />
+              </div>
+              <CommandList>
+                <CommandEmpty>No markets.</CommandEmpty>
+                <CommandGroup>
+                  {shown.map((row) => (
+                    <CommandItem
+                      key={row.id.toString()}
+                      value={row.symbol}
+                      data-testid={`market-row-${row.id}`}
+                      onSelect={() => pick(row)}
+                      className={GRID}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Monogram symbol={row.symbol} />
+                        <span className="font-semibold text-text">
+                          {row.symbol}
+                        </span>
+                        <span className="text-muted">{QUOTE}</span>
+                        {row.maxLeverage !== null && (
+                          <span className="rounded border border-border px-1 text-[10px] text-muted">
+                            {row.maxLeverage}x
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <LastPrice id={row.id} />
-                  <ChangeCell id={row.id} enabled={open} />
-                  <span className="text-right tabular-nums">
-                    {row.volumeUsd === null ? DASH : compactUsd(row.volumeUsd)}
-                  </span>
-                  {/* Рыночной капитализации нет ни в шлюзе, ни в SDK: она
-                      требует circulating supply, которого у контура нет.
-                      Колонка живёт прочерком, чтобы не расходиться с макетом
-                      структурно. */}
-                  <span className="text-right text-muted">{DASH}</span>
-                  <button
-                    type="button"
-                    data-testid={`market-favorite-${row.id}`}
-                    aria-label="Toggle favorite"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(row.id.toString());
-                    }}
-                  >
-                    <Star
-                      size={14}
-                      className={row.favorite ? "text-accent" : "text-muted"}
-                      fill={row.favorite ? "currentColor" : "none"}
-                    />
-                  </button>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
+                      <LastPrice id={row.id} />
+                      <ChangeCell id={row.id} enabled={open} />
+                      <span className="text-right tabular-nums">
+                        {row.volumeUsd === null ? DASH : compactUsd(row.volumeUsd)}
+                      </span>
+                      {/* Рыночной капитализации нет ни в шлюзе, ни в SDK: она
+                          требует circulating supply, которого у контура нет.
+                          Колонка живёт прочерком, чтобы не расходиться с макетом
+                          структурно. */}
+                      <span className="text-right text-muted">{DASH}</span>
+                      <button
+                        type="button"
+                        data-testid={`market-favorite-${row.id}`}
+                        aria-label="Toggle favorite"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(row.id.toString());
+                        }}
+                      >
+                        <Star
+                          size={14}
+                          className={row.favorite ? "text-accent" : "text-muted"}
+                          fill={row.favorite ? "currentColor" : "none"}
+                        />
+                      </button>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </div>
+          </div>
         </Command>
       </PopoverContent>
     </Popover>
