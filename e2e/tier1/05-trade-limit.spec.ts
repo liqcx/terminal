@@ -46,6 +46,40 @@ test.describe("limit orders", () => {
     );
   });
 
+  test("на дешёвом рынке клик по биду и MID кладут в поле цену с четырьмя знаками", async ({
+    page,
+    world,
+  }) => {
+    const level = (price: bigint) => ({
+      price: price.toString(),
+      size: WAD.toString(),
+    });
+    // Лучший бид 1.4990, лучший аск 1.5040 — середина 1.5015.
+    const bids = [1_4990n, 1_4980n, 1_4970n].map((p) =>
+      level((p * WAD) / 10_000n),
+    );
+    const asks = [1_5040n, 1_5050n, 1_5060n].map((p) =>
+      level((p * WAD) / 10_000n),
+    );
+    const { trade, book } = await enterTerminal(page, world, () =>
+      readyWorld({
+        price: (15_015n * WAD) / 10_000n,
+        orderbook: { bids, asks, asOf: Date.now() },
+      }),
+    );
+
+    // Мост из книги: подписка на стор режет цену уровня по точности рынка,
+    // а не по двум знакам первого рендера, когда марка ещё не было.
+    // Шаг книги по умолчанию на XRP — 0.1, он округлил бы 1.4990 до 1.4; берём
+    // самый мелкий (0.001), чтобы уровень лёг в поле как есть.
+    await book.selectTick(0);
+    await book.bidRow(0).click();
+    await expect(trade.limitPriceInput).toHaveValue("1.499");
+
+    await trade.midPriceButton.click();
+    await expect(trade.limitPriceInput).toHaveValue("1.5015");
+  });
+
   test("на дешёвом рынке TP/SL входа тоже вводятся с четырьмя знаками", async ({
     page,
     world,

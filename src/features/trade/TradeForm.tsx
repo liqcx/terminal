@@ -65,9 +65,9 @@ export function TradeForm() {
   const accountId = useAccountId();
   const stage = useSessionStage();
   const markPrice = useMarkPrice();
-  // Знаков в полях цены — по марку рынка (TRM-32). Одно число на три места:
-  // поле лимитной цены, мост из книги и кнопку MID; разойдясь, они дадут поле,
-  // молча отбрасывающее то, что мост в него положил.
+  // Знаков в полях цены — по марку рынка (TRM-32). Одно число на четыре места:
+  // поле лимитной цены, мост из книги, кнопку MID и поля TP/SL входа; разойдясь,
+  // они дадут поле, молча отбрасывающее то, что в него положил другой.
   const priceInputDecimals = priceDecimals(markPrice);
   const mid = useBookMid();
   const { data: margins } = useAvailableMarginQuery();

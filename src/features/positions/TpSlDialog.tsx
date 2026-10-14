@@ -6,7 +6,7 @@ import {
   Price,
 } from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
-import { formatQty, humanizeError, wadToFixed } from "@liq/core";
+import { formatQty, humanizeError } from "@liq/core";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { parseOrZero, priceDecimals } from "../../lib/format";
+import { parseOrZero } from "../../lib/format";
 import { DecimalInput } from "../../components/ui/DecimalInput";
 import { isCapped } from "../orders/cappedSizes";
+import { tpslDecimals, tpslPrefill } from "./tpslFields";
 import type { PositionRow } from "./usePositionRows";
 
 /**
@@ -48,18 +49,17 @@ export function TpSlDialog({
 }) {
   const accountId = useAccountId();
   const applyBrackets = useApplyBracketsMutation(accountId);
-  // Знаков в полях цены — по марку позиции (TRM-32); им же предзаполнены
-  // текущие триггеры, иначе 1.5015 в поле стал бы «1.50» и «Save» без правки
-  // молча сдвинул бы скобку.
-  const decimals = priceDecimals(row.markPrice ?? 0n);
+  // Знаков в полях цены — по марку позиции, а без марка по цене входа (TRM-32):
+  // начальные значения ниже берутся один раз, при монтировании.
+  const decimals = tpslDecimals(row.markPrice, row.position.entryPrice);
   const [tp, setTp] = useState(() =>
     row.brackets.takeProfit
-      ? wadToFixed(row.brackets.takeProfit.triggerPrice, decimals)
+      ? tpslPrefill(row.brackets.takeProfit.triggerPrice, decimals)
       : "",
   );
   const [sl, setSl] = useState(() =>
     row.brackets.stopLoss
-      ? wadToFixed(row.brackets.stopLoss.triggerPrice, decimals)
+      ? tpslPrefill(row.brackets.stopLoss.triggerPrice, decimals)
       : "",
   );
 

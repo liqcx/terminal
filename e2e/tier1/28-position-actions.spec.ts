@@ -215,6 +215,39 @@ test.describe("position actions", () => {
     expect(world.cancelledOrderIds).toEqual([]);
   });
 
+  test("на дешёвом рынке TP/SL позиции предзаполнен и вводится с четырьмя знаками", async ({
+    page,
+    world,
+  }) => {
+    const { userInfo } = await enterTerminal(page, world, () => {
+      // Цена входа в моке — индекс минус PnL на единицу размера: при PnL фикстуры
+      // в 100 на цене 1.5 она ушла бы в минус, и чтение позиций откатилось бы.
+      const w = readyWorld({
+        price: (15_015n * WAD) / 10_000n,
+        indexPrice: (15_015n * WAD) / 10_000n,
+      });
+      w.accounts[0].positions = [longPositionFixture({ totalPnl: 0n })];
+      w.conditionalOrders = [
+        conditionalOrderFixture({
+          id: "tp-1",
+          orderType: "TAKE_PROFIT_MARKET",
+          triggerPrice: ((16_123n * WAD) / 10_000n).toString(),
+        }),
+      ];
+      return w;
+    });
+
+    await userInfo.selectTab("positions");
+    await userInfo.editTpSl(MARKET.id).click();
+    await expect(userInfo.tpslDialog).toBeVisible();
+    await expect(userInfo.tpslTp).toHaveValue("1.6123");
+
+    await userInfo.tpslTp.fill("1.7123");
+    await expect(userInfo.tpslTp).toHaveValue("1.7123");
+    await userInfo.tpslSl.fill("1.4123");
+    await expect(userInfo.tpslSl).toHaveValue("1.4123");
+  });
+
   test("editing TP cancels the old trigger and submits a new one", async ({
     page,
     world,
