@@ -13,7 +13,7 @@
  * Значения `ClientState` кита — строки `"loading"` / `"ready"` / `"error"`
  * (`@turnkey/react-wallet-kit/dist/types/base.mjs:41-43`). Корень кита
  * перечисление реэкспортирует, но единственный прямой импорт из `@turnkey/*` в
- * приложении — `styles.css` (дизайн-спека входа через Turnkey), и чистый
+ * приложении — импорт стилей в `LiqSetup.tsx` (дизайн-спека входа через Turnkey), и чистый
  * предикат не тянет весь кит в юнит-тест, поэтому сравнивает по значению.
  */
 export function turnkeyRestoring(clientState: string | undefined): boolean {
