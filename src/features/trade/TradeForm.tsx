@@ -407,7 +407,7 @@ export function TradeForm() {
           baseSymbol={sizing.baseSymbol}
           quoteSymbol="USD"
           notional={sizing.notional}
-          invalid={rejection !== undefined}
+          invalid={rejection !== undefined || sizing.exceedsMax}
           unitDisabled={markPrice === 0n}
         />
 

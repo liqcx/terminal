@@ -564,3 +564,72 @@ test.describe("trade form gating & controls", () => {
     await expect(trade.submitButton).toBeEnabled();
   });
 });
+
+test.describe("смена плеча не трогает размер (TRM-26)", () => {
+  test("введённая Quantity остаётся, пересчитывается только процент", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+    await trade.setLeverage(2);
+    await trade.setSize("0.3");
+    const pctAt2 = await trade.sizePctValue.textContent();
+
+    await trade.setLeverage(5);
+    await expect(trade.sizeInput).toHaveValue("0.3");
+    await expect(trade.sizePctValue).not.toHaveText(pctAt2 ?? "");
+
+    await trade.setLeverage(2);
+    await expect(trade.sizeInput).toHaveValue("0.3");
+    await expect(trade.sizePctValue).toHaveText(pctAt2 ?? "");
+  });
+
+  test("процент пересчитывается от неизменного размера: 0.1 — 70% на 2x, 28% на 5x", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+    // Потолок = 5 000 · плечо / 70 000: 0.1429 на 2x и 0.3571 на 5x.
+    await trade.setLeverage(2);
+    await trade.setSize("0.1");
+    await expect(trade.sizePctValue).toHaveText("70%");
+
+    await trade.setLeverage(5);
+    await expect(trade.sizeInput).toHaveValue("0.1");
+    await expect(trade.sizePctValue).toHaveText("28%");
+  });
+
+  test("размер выше потолка нового плеча подсвечен, но не урезан", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world);
+    await trade.setLeverage(10);
+    await trade.setSizePct(100);
+    const full = await trade.sizeInput.inputValue();
+    await expect(trade.sizeInput).not.toHaveAttribute("aria-invalid", "true");
+
+    await trade.setLeverage(2);
+    await expect(trade.sizeInput).toHaveValue(full);
+    await expect(trade.sizeInput).toHaveAttribute("aria-invalid", "true");
+    await expect(trade.sizePctValue).toHaveText("100%");
+    // Подсветка не запрет: допуск по марже решают шлюз и протокол.
+    await expect(trade.submitButton).toBeEnabled();
+  });
+
+  test("в USD набранная сумма тоже не меняется", async ({ page, world }) => {
+    const { trade } = await enterTerminal(page, world);
+    await trade.setSizeUnit("usd");
+    await trade.setSize("500");
+
+    await trade.setLeverage(5);
+    await expect(trade.sizeInput).toHaveValue("500");
+  });
+
+  test("пустой размер плечо не заполняет", async ({ page, world }) => {
+    const { trade } = await enterTerminal(page, world);
+    await trade.setLeverage(5);
+    await expect(trade.sizeInput).toHaveValue("");
+    await expect(trade.sizePctValue).toHaveText("0%");
+  });
+});
