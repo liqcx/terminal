@@ -1,3 +1,4 @@
+import { ClientState } from "@turnkey/react-wallet-kit";
 import { describe, expect, it } from "vitest";
 
 import { bootGateLoading, turnkeyRestoring } from "../bootGate";
@@ -5,13 +6,13 @@ import { bootGateLoading, turnkeyRestoring } from "../bootGate";
 describe("turnkeyRestoring", () => {
   it("до создания клиента и во время восстановления сессий — восстанавливается", () => {
     expect(turnkeyRestoring(undefined)).toBe(true);
-    expect(turnkeyRestoring("loading")).toBe(true);
+    expect(turnkeyRestoring(ClientState.Loading)).toBe(true);
   });
 
   it("ready и error — восстановление закончено", () => {
-    expect(turnkeyRestoring("ready")).toBe(false);
+    expect(turnkeyRestoring(ClientState.Ready)).toBe(false);
     // Сбой конфигурации или клиента не держит лоадер вечно: вход должен быть виден.
-    expect(turnkeyRestoring("error")).toBe(false);
+    expect(turnkeyRestoring(ClientState.Error)).toBe(false);
   });
 });
 
