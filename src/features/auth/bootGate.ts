@@ -1,5 +1,3 @@
-import { ClientState } from "@turnkey/react-wallet-kit";
-
 /**
  * Восстанавливает ли кит Turnkey сессию прямо сейчас.
  *
@@ -12,14 +10,14 @@ import { ClientState } from "@turnkey/react-wallet-kit";
  * лоадер снимается, иначе сбой конфигурации запирал бы пользователя в
  * «Loading account…» навсегда.
  *
- * Перечисление берётся из корня `@turnkey/react-wallet-kit` (`@liq/react` его не
- * реэкспортирует): сравнение с `ClientState.Ready` / `.Error` под защитой
- * typecheck, а не строк, которые тихо разойдутся при переименовании в ките.
+ * Значения `ClientState` кита — строки `"loading"` / `"ready"` / `"error"`
+ * (`@turnkey/react-wallet-kit/dist/types/base.mjs:41-43`). Корень кита
+ * перечисление реэкспортирует, но единственный прямой импорт из `@turnkey/*` в
+ * приложении — `styles.css` (дизайн-спека входа через Turnkey), и чистый
+ * предикат не тянет весь кит в юнит-тест, поэтому сравнивает по значению.
  */
-export function turnkeyRestoring(clientState: ClientState | undefined): boolean {
-  return (
-    clientState !== ClientState.Ready && clientState !== ClientState.Error
-  );
+export function turnkeyRestoring(clientState: string | undefined): boolean {
+  return clientState !== "ready" && clientState !== "error";
 }
 
 /**
