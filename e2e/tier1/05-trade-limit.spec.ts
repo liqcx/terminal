@@ -46,6 +46,21 @@ test.describe("limit orders", () => {
     );
   });
 
+  test("на дешёвом рынке TP/SL входа тоже вводятся с четырьмя знаками", async ({
+    page,
+    world,
+  }) => {
+    const { trade } = await enterTerminal(page, world, () =>
+      readyWorld({ price: (15_015n * WAD) / 10_000n }),
+    );
+
+    await trade.tpslToggle.click();
+    await trade.entryTpInput.fill("1.6123");
+    await trade.entrySlInput.fill("1.4123");
+    await expect(trade.entryTpInput).toHaveValue("1.6123");
+    await expect(trade.entrySlInput).toHaveValue("1.4123");
+  });
+
   test("без книги и без марка MID неактивна, а не ставит ноль", async ({
     page,
     world,
