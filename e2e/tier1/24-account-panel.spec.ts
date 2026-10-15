@@ -22,6 +22,8 @@ test.describe("панель Account", () => {
     ]) {
       await expect(account.row(name)).toBeVisible();
     }
+    // Без позиций плечо — «0.00x» тем же форматтером, что на Overview (TRM-16).
+    await expect(account.row("leverage")).toHaveText("0.00x");
   });
 
   test("equity = available, офчейн-лок — отдельной строкой «In orders»", async ({

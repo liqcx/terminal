@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useRef } from "react";
 
 import { cssVar } from "@/lib/cssVar";
+import { chartPriceFormat } from "@/lib/format";
 import type { ChartScaleMode } from "@/stores/useTerminalUiStore";
 
 import { toLwcBar } from "./candleMapping";
@@ -124,6 +125,23 @@ export function CandleChart({
     }
     loadedRef.current = { key: seriesKey, length: bars.length };
   }, [bars, seriesKey]);
+
+  // Точность шкалы — по цене рынка (TRM-32): у серии по умолчанию два знака.
+  // Отдельным эффектом и только при смене числа знаков — иначе `applyOptions`
+  // шёл бы на каждом тике последнего бара.
+  const lastClose = bars.at(-1)?.close;
+  const precision =
+    lastClose === undefined ? undefined : chartPriceFormat(lastClose).precision;
+  const lastCloseRef = useRef(lastClose);
+  useEffect(() => {
+    lastCloseRef.current = lastClose;
+  });
+  useEffect(() => {
+    const series = seriesRef.current;
+    const close = lastCloseRef.current;
+    if (!series || close === undefined) return;
+    series.applyOptions({ priceFormat: chartPriceFormat(close) });
+  }, [precision]);
 
   // Режим шкалы — отдельным эффектом: он не зависит от данных, а применение
   // его вместе с ними перерисовывало бы шкалу на каждом баре.

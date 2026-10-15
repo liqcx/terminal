@@ -11,6 +11,7 @@ import { accountHref } from "@/lib/hashRoute";
 
 import {
   DASH,
+  EVENTS_UNAVAILABLE,
   fmtLeverage,
   fmtSignedPctNum,
   fmtSignedUsd,
@@ -189,8 +190,9 @@ export function OverviewTab() {
             </a>
           </div>
           {/* Та же подпись, что во вкладке Transactions: `available: false`
-              значит «депозиты и выводы неизвестны», а не «их не было», —
-              строки леджера ниже рисуются как обычно. */}
+              значит «история депозитов и выводов не прочитана», а не «их не
+              было» и не «они недоступны», — строки леджера ниже рисуются как
+              обычно, кнопки Deposit / Withdraw работают. */}
           {!activityPending &&
             !activityFailed &&
             month?.available === false && (
@@ -198,7 +200,7 @@ export function OverviewTab() {
                 className="text-xs text-muted"
                 data-testid="recent-activity-events-unavailable"
               >
-                Deposits and withdrawals are unavailable on this gateway
+                {EVENTS_UNAVAILABLE}
               </p>
             )}
           {activityPending ? null : activityFailed ? (

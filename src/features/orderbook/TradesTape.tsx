@@ -1,6 +1,7 @@
-import { formatPrice, getChainConfig } from "@liq/sdk";
+import { getChainConfig } from "@liq/sdk";
 import { useNetworkId } from "@liq/react";
 
+import { fmtPrice } from "../../lib/format";
 import { fmtBookSize, fmtTapeTime, padSlots } from "./bookView";
 import { type TapeRow, useTradesTape } from "./useTradesTape";
 
@@ -120,7 +121,7 @@ function TapeSlotRow({ row, testid, explorerUrl }: TapeSlotRowProps) {
     "grid h-[18px] grid-cols-3 items-center px-1 text-left text-xs";
   const content = (
     <>
-      <span className={priceClass}>{formatPrice(row.price, { sign: "" })}</span>
+      <span className={priceClass}>{fmtPrice(row.price)}</span>
       <span className="text-right text-text">{fmtBookSize(row.size)}</span>
       <span className="text-right text-muted">
         {fmtTapeTime(row.timestamp)}

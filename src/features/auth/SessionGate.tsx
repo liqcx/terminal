@@ -5,6 +5,7 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { megaethTestnet } from "../../config/chain";
 import { turnkeyLoginEnabled } from "../../config/env";
 import { Button } from "@/components/ui/button";
+import { bootGateLoading } from "./bootGate";
 import { ErrorLine } from "./SessionCta";
 import { SignInPanel } from "./SignInPanel";
 import { useTurnkeyIdentity } from "./TurnkeyIdentityProvider";
@@ -24,20 +25,22 @@ export function SessionGate({ children }: { children: ReactNode }) {
 }
 
 /**
- * Перехватывает гейт на то время, пока сессия Turnkey восстановлена, а
- * встроенный кошелёк ещё не разрешён.
+ * Перехватывает гейт, пока сессия Turnkey не восстановлена или восстановленная
+ * личность ещё не получила встроенный кошелёк.
  *
  * @remarks
- * Штатное восстановление wagmi заканчивается мгновенно: `isAuthorized()`
+ * Первое окно — кит читает сохранённую сессию (`get_user`, `list_wallets`):
+ * `authState` в это время уже `Unauthenticated`, и `SessionGateInner` рисовал
+ * «Continue with email» поверх живой сессии — на 3G по 4–5 секунд (TRM-18).
+ *
+ * Второе — штатное восстановление wagmi заканчивается мгновенно: `isAuthorized()`
  * коннектора Turnkey зовёт `getProvider()` по пустому в этот тик реестру
  * провайдеров, а лестнице ещё только предстоит круг к auth-proxy и
- * `resolve-signer`. Без этой ступени `SessionGateInner` в этом окне рисовал бы
- * экран входа поверх уже восстановленной сессии.
+ * `resolve-signer`.
  */
 function TurnkeyBootGate({ children }: { children: ReactNode }) {
-  const { subOrgId, embedded } = useTurnkeyIdentity();
-  const stillResolving = embedded.kind === "idle" || embedded.kind === "resolving";
-  if (subOrgId !== null && stillResolving) {
+  const { subOrgId, embedded, restoring } = useTurnkeyIdentity();
+  if (bootGateLoading({ restoring, subOrgId, embedded: embedded.kind })) {
     return (
       <Centered testid="session-loading">
         <p className="text-muted">Loading account…</p>

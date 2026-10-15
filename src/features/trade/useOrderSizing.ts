@@ -38,6 +38,7 @@ import {
 } from "./orderMarginView";
 import { useInvalidationRefetch } from "./previewRefresh";
 import { useHeldPreview } from "./useHeldPreview";
+import { exceedsBuyingPower } from "./sizingRules";
 import { ticketPrice, ticketSummary, type TicketSummary } from "./ticketSummary";
 
 export type SizeUnit = "base" | "usd";
@@ -58,6 +59,11 @@ type OrderSizing = {
   sizeQty: bigint; // magnitude, 18-dec base units
   pct: number; // 0–100 slice of buying power (what the control requested)
   maxSize: bigint; // buying-power ceiling, base units
+  /**
+   * Размер выше потолка покупательной способности при текущем плече —
+   * подсветка поля, не урезание (TRM-26).
+   */
+  exceedsMax: boolean;
   notional: bigint; // Usd, 18-dec
   /**
    * Обе стороны разом — тикет по макету показывает их рядом.
@@ -99,13 +105,13 @@ function parseSizeInput(
  * Interlinked order-sizing state for the trade ticket.
  *
  * Two pieces of state: the size string (in the active {@link SizeUnit} — the
- * authoritative order quantity) and `pct` (the slice of buying power the user
- * last requested via the slider/chips/Max — the authoritative slider position).
- * They are reconciled at every setter: typing a size re-derives `pct`; choosing
- * a `pct` rewrites the size; changing leverage rescales the size to preserve
- * `pct` against the new buying-power ceiling. Leverage never *fills* an empty
- * size — it only scales the buying-power ceiling (the ticket's Margin and
- * Liq. Price are the protocol's, from the contract preview).
+ * authoritative order quantity) and `pct` (the slice of buying power — the
+ * slider position). Quantity is primary (owner decision «e», TRM-26): typing a
+ * size re-derives `pct`; choosing a `pct` rewrites the size; changing leverage
+ * keeps the size exactly as it is and re-derives `pct` against the new
+ * buying-power ceiling. A size above the new ceiling is flagged
+ * (`exceedsMax`), never trimmed. Leverage never *fills* an empty size (the
+ * ticket's Margin and Liq. Price are the protocol's, from the contract preview).
  */
 export function useOrderSizing(params: {
   market: MarketSummary | undefined;
@@ -312,18 +318,19 @@ export function useOrderSizing(params: {
     setSizeStrRaw(fmtForUnit(pctToSize(clamped, maxSize), unit));
   }
 
+  // Quantity первична (TRM-26, решение «e»): плечо меняет только потолок, а
+  // размер остаётся тем, что набрал пользователь, — в любой единице. Процент
+  // слайдера пересчитывается от неизменного размера; пустой размер пустым и
+  // остаётся. Раньше размер переписывался из целого процента, и 0.3 после
+  // 2x → 5x → 2x становилось 0.3044.
   function setLeverage(l: number) {
     setLeverageRaw(l);
-    // Preserve the requested slice against the new ceiling — but never fill an
-    // empty size (decoupled: bumping leverage with no size leaves it empty).
-    if (sizeStr) {
-      const nextMax = sizeFromLeverage({
-        availableUsd: Usd(available),
-        leverage: l,
-        markPrice: Price(sizePrice),
-      });
-      setSizeStrRaw(fmtForUnit(pctToSize(pct, nextMax), unit));
-    }
+    const nextMax = sizeFromLeverage({
+      availableUsd: Usd(available),
+      leverage: l,
+      markPrice: Price(sizePrice),
+    });
+    setPctRaw(sizeToPct(Qty(sizeQty), nextMax));
   }
 
   function setUnit(next: SizeUnit) {
@@ -351,6 +358,7 @@ export function useOrderSizing(params: {
     sizeQty,
     pct,
     maxSize,
+    exceedsMax: exceedsBuyingPower(sizeQty, maxSize),
     notional,
     summary,
     rows,

@@ -20,7 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { DASH, fmtSignedUsdNum, fmtTime } from "../../lib/format";
+import {
+  DASH,
+  EVENTS_UNAVAILABLE,
+  fmtSignedUsdNum,
+  fmtTime,
+} from "../../lib/format";
 import { marketSymbol, useSelectedMarket } from "../market/useSelectedMarket";
 import { Panel, PeriodSelect } from "./AccountCards";
 import {
@@ -204,7 +209,7 @@ export function TransactionsTab() {
           <Download size={14} /> CSV
         </Button>
       </div>
-      {/* `available: false` — «события депозитов и выводов неизвестны», а не
+      {/* `available: false` — «история депозитов и выводов не прочитана», а не
           «их не было»: без подписи таблица из одних расчётов леджера (или
           пустая) читалась бы как «переводов не делали». Строки леджера при
           этом рисуются как обычно. */}
@@ -213,7 +218,7 @@ export function TransactionsTab() {
           className="text-xs text-muted"
           data-testid="transactions-events-unavailable"
         >
-          Deposits and withdrawals are unavailable on this gateway
+          {EVENTS_UNAVAILABLE}
         </p>
       )}
       <DataTable

@@ -6,7 +6,7 @@ import {
   Price,
 } from "@liq/sdk";
 import { useAccountId, useApplyBracketsMutation } from "@liq/react";
-import { formatQty, humanizeError, wadToFixed } from "@liq/core";
+import { formatQty, humanizeError } from "@liq/core";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 import { parseOrZero } from "../../lib/format";
 import { DecimalInput } from "../../components/ui/DecimalInput";
 import { isCapped } from "../orders/cappedSizes";
+import { tpslDecimals, tpslPrefill } from "./tpslFields";
 import type { PositionRow } from "./usePositionRows";
 
 /**
@@ -48,14 +49,17 @@ export function TpSlDialog({
 }) {
   const accountId = useAccountId();
   const applyBrackets = useApplyBracketsMutation(accountId);
+  // Знаков в полях цены — по марку позиции, а без марка по цене входа (TRM-32):
+  // начальные значения ниже берутся один раз, при монтировании.
+  const decimals = tpslDecimals(row.markPrice, row.position.entryPrice);
   const [tp, setTp] = useState(() =>
     row.brackets.takeProfit
-      ? wadToFixed(row.brackets.takeProfit.triggerPrice, 2)
+      ? tpslPrefill(row.brackets.takeProfit.triggerPrice, decimals)
       : "",
   );
   const [sl, setSl] = useState(() =>
     row.brackets.stopLoss
-      ? wadToFixed(row.brackets.stopLoss.triggerPrice, 2)
+      ? tpslPrefill(row.brackets.stopLoss.triggerPrice, decimals)
       : "",
   );
 
@@ -129,7 +133,7 @@ export function TpSlDialog({
         <DecimalInput
           value={tp}
           onValueChange={setTp}
-          maxDecimals={2}
+          maxDecimals={decimals}
           placeholder="0.00"
           data-testid="tpsl-tp-input"
         />
@@ -140,7 +144,7 @@ export function TpSlDialog({
         <DecimalInput
           value={sl}
           onValueChange={setSl}
-          maxDecimals={2}
+          maxDecimals={decimals}
           placeholder="0.00"
           data-testid="tpsl-sl-input"
         />
