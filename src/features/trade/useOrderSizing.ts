@@ -14,13 +14,10 @@ import {
 } from "@liq/sdk";
 import {
   useDebounce,
-  useLiqQueryKeys,
   useMarginUsage,
   useOrderMarginPreview,
-  useWallet,
 } from "@liq/react";
 import { wadToFixed } from "@liq/core";
-import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import type { MarketSummary } from "../market/useSelectedMarket";
@@ -36,7 +33,6 @@ import {
   settledMark,
   warnRequirement,
 } from "./orderMarginView";
-import { useInvalidationRefetch } from "./previewRefresh";
 import { useHeldPreview } from "./useHeldPreview";
 import { exceedsBuyingPower } from "./sizingRules";
 import { ticketPrice, ticketSummary, type TicketSummary } from "./ticketSummary";
@@ -198,39 +194,15 @@ export function useOrderSizing(params: {
     summary.short.sizeDelta,
     priceForPreview,
   );
-  // Тусклить цифры стоит на перечитывании после протухания среза (филл,
-  // депозит, вывод, погашение), а не на каждый такт 10-секундного таймера SDK.
-  // Ключ собран так же, как в `useOrderMarginPreview` (SDK 0.68); когда SDK
-  // отдаст флаг `refreshing` сам, этот код уходит.
-  const queryClient = useQueryClient();
-  const queryKeys = useLiqQueryKeys();
-  const wallet = useWallet();
-  const previewKey = (sizeDelta: bigint) =>
-    queryKeys.orderMarginPreview(
-      wallet ?? "",
-      previewAccount?.toString() ?? "none",
-      (market?.id ?? 0n).toString(),
-      sizeDelta.toString(),
-      priceForPreview.toString(),
-      "none",
-    );
-  const longRefreshing = useInvalidationRefetch(
-    queryClient,
-    previewKey(summary.long.sizeDelta),
-    longPreview.isFetching,
-    longPreview.data !== undefined,
-  );
-  const shortRefreshing = useInvalidationRefetch(
-    queryClient,
-    previewKey(summary.short.sizeDelta),
-    shortPreview.isFetching,
-    shortPreview.data !== undefined,
-  );
+  // `refreshing` отдаёт сам SDK (0.69): перечитывание после события счёта
+  // (филл, депозит, вывод, погашение), а не такт 10-секундного таймера.
+  const longRefreshing = longPreview.refreshing;
+  const shortRefreshing = shortPreview.refreshing;
   // R0 — требование аккаунта до ордера. Есть только с данными: загрузка и
   // ошибка дают `undefined`, а не 0n.
   const { data: usage } = useMarginUsage(accountId);
   const r0 = usage?.requiredInitialMargin;
-  // Кэш превью сбрасывает сам SDK (0.68): срез кошелька протухает от
+  // Кэш превью сбрасывает сам SDK (с 0.68): срез кошелька протухает от
   // `orderSettled` / `deposited` / `withdrawn` / `repaid` и перечитывается раз в 10 с.
   // R1 — требование всего аккаунта после ордера. `data` есть только у
   // прочитанного превью; ключ запроса несёт размер и цену, поэтому после
